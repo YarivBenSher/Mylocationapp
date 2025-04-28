@@ -17,6 +17,7 @@
             flex-direction: column;
             align-items: center;
             background-color: #f0f0f0;
+            overflow-x: hidden; /* Prevent horizontal scroll when menu is open */
         }
         h1 {
             color: #333;
@@ -44,7 +45,7 @@
             direction: rtl;
             text-align: right;
         }
-        /* Button bar container (exit + language + refresh + add buttons) */
+        /* Button bar container (language buttons only) */
         .button-bar {
             position: absolute;
             top: 20px; /* 2 cm below the upper boundary of the map container */
@@ -80,33 +81,74 @@
             background-color: #333;
             border: 2px solid #fff;
         }
-        /* Exit button styling */
-        .exit-button {
-            background-image: url('https://www.iconarchive.com/download/i51095/oxygen-icons.org/oxygen/Actions-system-shutdown.ico');
-            background-size: contain;
-            background-position: center;
-            background-repeat: no-repeat;
-            background-color: #666;
-        }
-        .exit-button:hover {
-            background-color: #555;
-        }
-        /* Refresh button styling */
-        .refresh-button {
+        /* Menu toggle button (hamburger icon) */
+        .menu-toggle {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            width: 32px;
+            height: 32px;
+            border: none;
+            border-radius: 50%;
             background-color: #666;
             color: white;
             font-size: 16px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            z-index: 1000;
+            transition: background-color 0.3s;
         }
-        .refresh-button:hover {
+        .menu-toggle:hover {
             background-color: #555;
         }
-        /* Add location button styling */
-        .add-button {
+        /* Side menu styling */
+        .side-menu {
+            position: fixed;
+            top: 0;
+            left: -250px; /* Hidden by default */
+            width: 250px;
+            height: 100%;
+            background-color: #333;
+            color: white;
+            padding: 20px;
+            box-shadow: 2px 0 5px rgba(0, 0, 0, 0.5);
+            transition: left 0.3s ease-in-out;
+            z-index: 2000;
+        }
+        .side-menu.open {
+            left: 0; /* Slide in when open */
+        }
+        .side-menu .close-btn {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            background: none;
+            border: none;
+            color: white;
+            font-size: 20px;
+            cursor: pointer;
+        }
+        .side-menu h2 {
+            margin: 0 0 20px 0;
+            font-size: 20px;
+        }
+        .side-menu button {
+            display: block;
+            width: 100%;
+            padding: 10px;
+            margin-bottom: 10px;
             background-color: #666;
             color: white;
+            border: none;
+            border-radius: 5px;
             font-size: 16px;
+            cursor: pointer;
+            text-align: left;
+            transition: background-color 0.3s;
         }
-        .add-button:hover {
+        .side-menu button:hover {
             background-color: #555;
         }
         /* Toast bar styling */
@@ -140,16 +182,25 @@
     <h1>Live-Runners Map</h1>
     <div class="map-wrapper">
         <div class="map-container" id="map-container">
+            <button class="menu-toggle" onclick="toggleMenu()" title="Open Menu">☰</button>
             <div class="button-bar">
-                <button class="exit-button" onclick="shutdownApp()" title="Minimize Application"></button>
                 <button class="language-button" id="lang-en" onclick="setLanguage('en')">EN</button>
                 <button class="language-button" id="lang-device" onclick="setLanguage('device')"></button>
-                <button class="refresh-button" onclick="refreshPage()" title="Refresh Map">⟳</button>
-                <button class="add-button" onclick="addNewLocation()" title="Add New Location">+</button>
             </div>
             <div id="map"></div>
         </div>
     </div>
+
+    <!-- Side Menu -->
+    <div class="side-menu" id="side-menu">
+        <button class="close-btn" onclick="toggleMenu()">×</button>
+        <h2>Menu</h2>
+        <button onclick="shutdownApp()">Minimize Application</button>
+        <button onclick="refreshPage()">Refresh Map</button>
+        <button onclick="addNewLocation()">Add New Location</button>
+        <button onclick="forgetLocations()">Forget Locations</button>
+    </div>
+
     <script>
         // Initialize the map with a default location (fallback)
         let map = L.map('map').setView([51.505, -0.09], 13); // Centered on London
@@ -176,6 +227,12 @@
             '+33': { lat: 48.8566, lng: 2.3522, name: 'France (Paris)' }, // France
             '+81': { lat: 35.6762, lng: 139.6503, name: 'Japan (Tokyo)' } // Japan
         };
+
+        // Function to toggle the side menu
+        function toggleMenu() {
+            const menu = document.getElementById('side-menu');
+            menu.classList.toggle('open');
+        }
 
         // Load custom locations from localStorage
         function loadCustomLocations() {
@@ -255,6 +312,18 @@
             newMarker.country = locationData.name; // Store country name for saving
             customMarkers.push(newMarker);
             saveCustomLocations();
+            toggleMenu(); // Close the menu after action
+        }
+
+        // Function to forget all custom locations
+        function forgetLocations() {
+            if (!isAppRunning) return;
+
+            // Remove all custom markers from the map
+            customMarkers.forEach(marker => marker.remove());
+            customMarkers = [];
+            localStorage.removeItem('customLocations');
+            toggleMenu(); // Close the menu after action
         }
 
         // Function to set the language and update button styles
@@ -381,12 +450,15 @@
                     mapContainer.appendChild(messageDiv);
                 }
             }, 1000); // Update every 1 second
+
+            toggleMenu(); // Close the menu after action
         }
 
         // Function to refresh the page
         function refreshPage() {
             localStorage.setItem('hasRefreshed', 'true');
             location.reload();
+            toggleMenu(); // Close the menu after action
         }
 
         // Function to get current location
