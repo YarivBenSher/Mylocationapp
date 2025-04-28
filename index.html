@@ -168,6 +168,15 @@
             localStorage.setItem('hasRefreshed', 'false');
         }
 
+        // Mapping of country codes to coordinates (simulated locations)
+        const countryCodeLocations = {
+            '+972': { lat: 32.0853, lng: 34.7818, name: 'Israel (Tel Aviv)' }, // Israel
+            '+1': { lat: 40.7128, lng: -74.0060, name: 'USA (New York)' }, // USA
+            '+44': { lat: 51.5074, lng: -0.1278, name: 'UK (London)' }, // UK
+            '+33': { lat: 48.8566, lng: 2.3522, name: 'France (Paris)' }, // France
+            '+81': { lat: 35.6762, lng: 139.6503, name: 'Japan (Tokyo)' } // Japan
+        };
+
         // Load custom locations from localStorage
         function loadCustomLocations() {
             const storedLocations = localStorage.getItem('customLocations');
@@ -175,10 +184,10 @@
                 customMarkers = JSON.parse(storedLocations).map(loc => {
                     const marker = L.marker([loc.lat, loc.lng]).addTo(map);
                     const popupText = currentLanguage === 'en'
-                        ? `Location added by: ${loc.phone}`
+                        ? `Location for ${loc.phone}: ${loc.country}`
                         : currentLanguage === 'he'
-                        ? `מיקום נוסף על ידי: ${loc.phone}`
-                        : `Location added by: ${loc.phone} (${currentLanguage})`;
+                        ? `מיקום עבור ${loc.phone}: ${loc.country}`
+                        : `Location for ${loc.phone}: ${loc.country} (${currentLanguage})`;
                     marker.bindPopup(popupText);
                     return marker;
                 });
@@ -190,63 +199,62 @@
             const locations = customMarkers.map(marker => ({
                 lat: marker.getLatLng().lat,
                 lng: marker.getLatLng().lng,
-                phone: marker.phone
+                phone: marker.phone,
+                country: marker.country
             }));
             localStorage.setItem('customLocations', JSON.stringify(locations));
         }
 
-        // Function to add a new location
+        // Function to add a new location based on phone number
         function addNewLocation() {
             if (!isAppRunning) return;
 
             const lang = currentLanguage === 'device' ? deviceLang : currentLanguage;
             const promptMessage = lang === 'en'
-                ? 'Enter mobile phone number to add a new location:'
+                ? 'Enter mobile phone number (with country code, e.g., +972123456789):'
                 : lang === 'he'
-                ? 'הזן מספר טלפון נייד כדי להוסיף מיקום חדש:'
-                : `Enter mobile phone number to add a new location: (${lang})`;
+                ? 'הזן מספר טלפון נייד (עם קוד מדינה, לדוגמה, +972123456789):'
+                : `Enter mobile phone number (with country code): (${lang})`;
 
             const phone = prompt(promptMessage);
             if (!phone) return; // User canceled or entered nothing
 
-            // Fetch current location for the new marker
-            if (navigator.geolocation) {
-                navigator.geolocation.getCurrentPosition(
-                    position => {
-                        const { latitude, longitude } = position.coords;
-                        const newMarker = L.marker([latitude, longitude]).addTo(map);
-                        const popupText = lang === 'en'
-                            ? `Location added by: ${phone}`
-                            : lang === 'he'
-                            ? `מיקום נוסף על ידי: ${phone}`
-                            : `Location added by: ${phone} (${lang})`;
-                        newMarker.bindPopup(popupText);
-                        newMarker.phone = phone; // Store phone number in marker for saving
-                        customMarkers.push(newMarker);
-                        saveCustomLocations();
-                    },
-                    error => {
-                        const errorMessage = lang === 'en'
-                            ? 'Unable to retrieve location. Please ensure location services are enabled.'
-                            : lang === 'he'
-                            ? 'לא ניתן לאחזר את המיקום. אנא ודא ששירותי המיקום מופעלים.'
-                            : `Unable to retrieve location. (${lang})`;
-                        alert(errorMessage);
-                    },
-                    {
-                        enableHighAccuracy: true,
-                        timeout: 10000,
-                        maximumAge: 0
-                    }
-                );
-            } else {
+            // Extract country code (e.g., "+972")
+            const countryCodeMatch = phone.match(/^\+(\d{1,3})/);
+            if (!countryCodeMatch) {
                 const errorMessage = lang === 'en'
-                    ? 'Geolocation not supported by your browser.'
+                    ? 'Invalid phone number. Please include the country code (e.g., +972).'
                     : lang === 'he'
-                    ? 'גיאולוקיישן לא נתמך על ידי הדפדפן שלך.'
-                    : `Geolocation not supported. (${lang})`;
+                    ? 'מספר טלפון לא תקין. אנא כלול את קוד המדינה (לדוגמה, +972).'
+                    : `Invalid phone number. Include country code. (${lang})`;
                 alert(errorMessage);
+                return;
             }
+
+            const countryCode = countryCodeMatch[0];
+            const locationData = countryCodeLocations[countryCode];
+            if (!locationData) {
+                const errorMessage = lang === 'en'
+                    ? 'Location not available for this country code.'
+                    : lang === 'he'
+                    ? 'המיקום אינו זמין עבור קוד מדינה זה.'
+                    : `Location not available for this country code. (${lang})`;
+                alert(errorMessage);
+                return;
+            }
+
+            // Add marker at the simulated location
+            const newMarker = L.marker([locationData.lat, locationData.lng]).addTo(map);
+            const popupText = lang === 'en'
+                ? `Location for ${phone}: ${locationData.name}`
+                : lang === 'he'
+                ? `מיקום עבור ${phone}: ${locationData.name}`
+                : `Location for ${phone}: ${locationData.name} (${lang})`;
+            newMarker.bindPopup(popupText);
+            newMarker.phone = phone; // Store phone number in marker for saving
+            newMarker.country = locationData.name; // Store country name for saving
+            customMarkers.push(newMarker);
+            saveCustomLocations();
         }
 
         // Function to set the language and update button styles
@@ -301,10 +309,10 @@
             // Update custom markers' popups
             customMarkers.forEach(m => {
                 const popupText = lang === 'en'
-                    ? `Location added by: ${m.phone}`
+                    ? `Location for ${m.phone}: ${m.country}`
                     : lang === 'he'
-                    ? `מיקום נוסף על ידי: ${m.phone}`
-                    : `Location added by: ${m.phone} (${lang})`;
+                    ? `מיקום עבור ${m.phone}: ${m.country}`
+                    : `Location for ${m.phone}: ${m.country} (${lang})`;
                 m.setPopupContent(popupText);
             });
         }
