@@ -44,7 +44,7 @@
             direction: rtl;
             text-align: right;
         }
-        /* Button bar container (exit + language + refresh buttons) */
+        /* Button bar container (exit + language + refresh + add buttons) */
         .button-bar {
             position: absolute;
             top: 20px; /* 2 cm below the upper boundary of the map container */
@@ -100,6 +100,15 @@
         .refresh-button:hover {
             background-color: #555;
         }
+        /* Add location button styling */
+        .add-button {
+            background-color: #666;
+            color: white;
+            font-size: 16px;
+        }
+        .add-button:hover {
+            background-color: #555;
+        }
         /* Toast bar styling */
         .toast-bar {
             position: absolute;
@@ -136,6 +145,7 @@
                 <button class="language-button" id="lang-en" onclick="setLanguage('en')">EN</button>
                 <button class="language-button" id="lang-device" onclick="setLanguage('device')"></button>
                 <button class="refresh-button" onclick="refreshPage()" title="Refresh Map">⟳</button>
+                <button class="add-button" onclick="addNewLocation()" title="Add New Location">+</button>
             </div>
             <div id="map"></div>
         </div>
@@ -144,6 +154,7 @@
         // Initialize the map with a default location (fallback)
         let map = L.map('map').setView([51.505, -0.09], 13); // Centered on London
         let marker;
+        let customMarkers = []; // Store custom markers
         let isAppRunning = true;
         let currentLanguage = 'device'; // Default to device language
         let deviceLang = navigator.language || navigator.userLanguage || 'en';
@@ -155,6 +166,87 @@
         // Check if the page has been refreshed
         if (!localStorage.getItem('hasRefreshed')) {
             localStorage.setItem('hasRefreshed', 'false');
+        }
+
+        // Load custom locations from localStorage
+        function loadCustomLocations() {
+            const storedLocations = localStorage.getItem('customLocations');
+            if (storedLocations) {
+                customMarkers = JSON.parse(storedLocations).map(loc => {
+                    const marker = L.marker([loc.lat, loc.lng]).addTo(map);
+                    const popupText = currentLanguage === 'en'
+                        ? `Location added by: ${loc.phone}`
+                        : currentLanguage === 'he'
+                        ? `מיקום נוסף על ידי: ${loc.phone}`
+                        : `Location added by: ${loc.phone} (${currentLanguage})`;
+                    marker.bindPopup(popupText);
+                    return marker;
+                });
+            }
+        }
+
+        // Save custom locations to localStorage
+        function saveCustomLocations() {
+            const locations = customMarkers.map(marker => ({
+                lat: marker.getLatLng().lat,
+                lng: marker.getLatLng().lng,
+                phone: marker.phone
+            }));
+            localStorage.setItem('customLocations', JSON.stringify(locations));
+        }
+
+        // Function to add a new location
+        function addNewLocation() {
+            if (!isAppRunning) return;
+
+            const lang = currentLanguage === 'device' ? deviceLang : currentLanguage;
+            const promptMessage = lang === 'en'
+                ? 'Enter mobile phone number to add a new location:'
+                : lang === 'he'
+                ? 'הזן מספר טלפון נייד כדי להוסיף מיקום חדש:'
+                : `Enter mobile phone number to add a new location: (${lang})`;
+
+            const phone = prompt(promptMessage);
+            if (!phone) return; // User canceled or entered nothing
+
+            // Fetch current location for the new marker
+            if (navigator.geolocation) {
+                navigator.geolocation.getCurrentPosition(
+                    position => {
+                        const { latitude, longitude } = position.coords;
+                        const newMarker = L.marker([latitude, longitude]).addTo(map);
+                        const popupText = lang === 'en'
+                            ? `Location added by: ${phone}`
+                            : lang === 'he'
+                            ? `מיקום נוסף על ידי: ${phone}`
+                            : `Location added by: ${phone} (${lang})`;
+                        newMarker.bindPopup(popupText);
+                        newMarker.phone = phone; // Store phone number in marker for saving
+                        customMarkers.push(newMarker);
+                        saveCustomLocations();
+                    },
+                    error => {
+                        const errorMessage = lang === 'en'
+                            ? 'Unable to retrieve location. Please ensure location services are enabled.'
+                            : lang === 'he'
+                            ? 'לא ניתן לאחזר את המיקום. אנא ודא ששירותי המיקום מופעלים.'
+                            : `Unable to retrieve location. (${lang})`;
+                        alert(errorMessage);
+                    },
+                    {
+                        enableHighAccuracy: true,
+                        timeout: 10000,
+                        maximumAge: 0
+                    }
+                );
+            } else {
+                const errorMessage = lang === 'en'
+                    ? 'Geolocation not supported by your browser.'
+                    : lang === 'he'
+                    ? 'גיאולוקיישן לא נתמך על ידי הדפדפן שלך.'
+                    : `Geolocation not supported. (${lang})`;
+                alert(errorMessage);
+            }
         }
 
         // Function to set the language and update button styles
@@ -205,6 +297,16 @@
             marker = L.marker(location).addTo(map)
                 .bindPopup(popupText)
                 .openPopup();
+
+            // Update custom markers' popups
+            customMarkers.forEach(m => {
+                const popupText = lang === 'en'
+                    ? `Location added by: ${m.phone}`
+                    : lang === 'he'
+                    ? `מיקום נוסף על ידי: ${m.phone}`
+                    : `Location added by: ${m.phone} (${lang})`;
+                m.setPopupContent(popupText);
+            });
         }
 
         // Function to shut down (minimize) the application with countdown
@@ -223,11 +325,16 @@
 
             isAppRunning = false;
 
-            // Remove map and marker
+            // Remove map, marker, and custom markers
             if (marker) marker.remove();
+            customMarkers.forEach(m => m.remove());
             map.remove();
             const mapContainer = document.getElementById('map-container');
             mapContainer.innerHTML = '';
+
+            // Clear custom locations from localStorage
+            localStorage.removeItem('customLocations');
+            customMarkers = [];
 
             // Create toast bar for countdown
             const toast = document.createElement('div');
@@ -314,9 +421,9 @@
                         updateMapLanguage();
                     },
                     {
-                        enableHighAccuracy: true, // Try to get precise location (GPS if available)
-                        timeout: 10000, // 10-second timeout
-                        maximumAge: 0 // Don't use cached location
+                        enableHighAccuracy: true,
+                        timeout: 10000,
+                        maximumAge: 0
                     }
                 );
             } else {
@@ -329,6 +436,9 @@
 
         // Set default to device language and initialize map
         setLanguage('device'); // Default to device language
+
+        // Load custom locations
+        loadCustomLocations();
 
         // Only fetch location if the page has been refreshed
         if (localStorage.getItem('hasRefreshed') === 'true') {
