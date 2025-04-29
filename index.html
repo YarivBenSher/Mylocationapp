@@ -1,0 +1,519 @@
+<script type="text/javascript">
+        var gk_isXlsx = false;
+        var gk_xlsxFileLookup = {};
+        var gk_fileData = {};
+        function filledCell(cell) {
+          return cell !== '' && cell != null;
+        }
+        function loadFileData(filename) {
+        if (gk_isXlsx && gk_xlsxFileLookup[filename]) {
+            try {
+                var workbook = XLSX.read(gk_fileData[filename], { type: 'base64' });
+                var firstSheetName = workbook.SheetNames[0];
+                var worksheet = workbook.Sheets[firstSheetName];
+
+                // Convert sheet to JSON to filter blank rows
+                var jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1, blankrows: false, defval: '' });
+                // Filter out blank rows (rows where all cells are empty, null, or undefined)
+                var filteredData = jsonData.filter(row => row.some(filledCell));
+
+                // Heuristic to find the header row by ignoring rows with fewer filled cells than the next row
+                var headerRowIndex = filteredData.findIndex((row, index) =>
+                  row.filter(filledCell).length >= filteredData[index + 1]?.filter(filledCell).length
+                );
+                // Fallback
+                if (headerRowIndex === -1 || headerRowIndex > 25) {
+                  headerRowIndex = 0;
+                }
+
+                // Convert filtered JSON back to CSV
+                var csv = XLSX.utils.aoa_to_sheet(filteredData.slice(headerRowIndex)); // Create a new sheet from filtered array of arrays
+                csv = XLSX.utils.sheet_to_csv(csv, { header: 1 });
+                return csv;
+            } catch (e) {
+                console.error(e);
+                return "";
+            }
+        }
+        return gk_fileData[filename] || "";
+        }
+        </script><!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Live-Runners Map</title>
+    <!-- Leaflet CSS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <!-- Leaflet JavaScript -->
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <style>
+        body {
+            margin: 0;
+            padding: 20px;
+            font-family: Arial, sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            background-color: #f0f0f0;
+        }
+        h1 {
+            color: #333;
+            margin-bottom: 10px;
+        }
+        .map-wrapper {
+            position: relative;
+            width: 100%;
+            max-width: 800px;
+        }
+        .map-container {
+            position: relative;
+            width: 100%;
+            height: 500px;
+            border: 2px solid #ccc;
+            border-radius: 8px;
+            overflow: hidden;
+        }
+        #map {
+            width: 100%;
+            height: 100%;
+        }
+        /* Ensure right-to-left text for device language if applicable */
+        [dir="rtl"] {
+            direction: rtl;
+            text-align: right;
+        }
+        /* Button bar container (language buttons only) */
+        .button-bar {
+            position: absolute;
+            top: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            display: flex;
+            gap: 10px;
+            justify-content: center;
+            z-index: 1000;
+        }
+        /* Shared button styling */
+        .button-bar button {
+            width: 32px;
+            height: 32px;
+            border: none;
+            border-radius: 50%;
+            font-size: 14px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            transition: background-color 0.3s;
+        }
+        /* Language button styling */
+        .language-button {
+            background-color: #666;
+            color: white;
+        }
+        .language-button:hover {
+            background-color: #555;
+        }
+        .language-button.selected {
+            background-color: #333;
+            border: 2px solid #fff;
+        }
+        /* Menu styling (now embedded in the page) */
+        .menu {
+            width: 100%;
+            max-width: 800px;
+            background-color: #333;
+            color: white;
+            padding: 20px;
+            margin-top: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.5);
+        }
+        .menu h2 {
+            margin: 0 0 20px 0;
+            font-size: 20px;
+        }
+        .menu button {
+            display: block;
+            width: 100%;
+            padding: 10px;
+            margin-bottom: 10px;
+            background-color: #666;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            font-size: 16px;
+            cursor: pointer;
+            text-align: left;
+            transition: background-color 0.3s;
+        }
+        .menu button:hover {
+            background-color: #555;
+        }
+        /* Toast bar styling */
+        .toast-bar {
+            position: absolute;
+            top: 0;
+            left: 50%;
+            transform: translateX(-50%);
+            background-color: rgba(0, 0, 0, 0.8);
+            color: white;
+            padding: 10px 20px;
+            border-radius: 5px;
+            font-size: 16px;
+            z-index: 1001;
+            text-align: center;
+        }
+        /* Minimize message styling */
+        .minimize-message {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            height: 100%;
+            font-size: 20px;
+            color: #333;
+            text-align: center;
+            padding: 20px;
+        }
+    </style>
+</head>
+<body>
+    <h1>Live-Runners Map</h1>
+    <div class="map-wrapper">
+        <div class="map-container" id="map-container">
+            <div class="button-bar">
+                <button class="language-button" id="lang-en" onclick="setLanguage('en')">EN</button>
+                <button class="language-button" id="lang-device" onclick="setLanguage('device')"></button>
+            </div>
+            <div id="map"></div>
+        </div>
+    </div>
+
+    <!-- Menu (now embedded in the page) -->
+    <div class="menu" id="menu">
+        <h2>Menu</h2>
+        <button onclick="shutdownApp()">Minimize Application</button>
+        <button onclick="refreshPage()">Refresh Map</button>
+        <button onclick="addNewLocation()">Add New Location</button>
+        <button onclick="forgetLocations()">Forget Locations</button>
+    </div>
+
+    <script>
+        // Initialize the map with a default location (fallback)
+        let map = L.map('map').setView([51.505, -0.09], 13); // Centered on London
+        let marker;
+        let customMarkers = []; // Store custom markers
+        let isAppRunning = true;
+        let currentLanguage = 'device'; // Default to device language
+        let deviceLang = navigator.language || navigator.userLanguage || 'en';
+        deviceLang = deviceLang.split('-')[0]; // Simplify to primary language code
+
+        // Set the device language button text
+        document.getElementById('lang-device').textContent = deviceLang.toUpperCase();
+
+        // Check if the page has been refreshed
+        if (!localStorage.getItem('hasRefreshed')) {
+            localStorage.setItem('hasRefreshed', 'false');
+        }
+
+        // Mapping of country codes to coordinates (simulated locations)
+        const countryCodeLocations = {
+            '+972': { lat: 32.0853, lng: 34.7818, name: 'Israel (Tel Aviv)' }, // Israel
+            '+1': { lat: 40.7128, lng: -74.0060, name: 'USA (New York)' }, // USA
+            '+44': { lat: 51.5074, lng: -0.1278, name: 'UK (London)' }, // UK
+            '+33': { lat: 48.8566, lng: 2.3522, name: 'France (Paris)' }, // France
+            '+81': { lat: 35.6762, lng: 139.6503, name: 'Japan (Tokyo)' } // Japan
+        };
+
+        // Load custom locations from localStorage
+        function loadCustomLocations() {
+            const storedLocations = localStorage.getItem('customLocations');
+            if (storedLocations) {
+                customMarkers = JSON.parse(storedLocations).map(loc => {
+                    const marker = L.marker([loc.lat, loc.lng]).addTo(map);
+                    const popupText = currentLanguage === 'en'
+                        ? `Location for ${loc.phone}: ${loc.country}`
+                        : currentLanguage === 'he'
+                        ? `מיקום עבור ${loc.phone}: ${loc.country}`
+                        : `Location for ${loc.phone}: ${loc.country} (${currentLanguage})`;
+                    marker.bindPopup(popupText);
+                    return marker;
+                });
+            }
+        }
+
+        // Save custom locations to localStorage
+        function saveCustomLocations() {
+            const locations = customMarkers.map(marker => ({
+                lat: marker.getLatLng().lat,
+                lng: marker.getLatLng().lng,
+                phone: marker.phone,
+                country: marker.country
+            }));
+            localStorage.setItem('customLocations', JSON.stringify(locations));
+        }
+
+        // Function to add a new location based on phone number
+        function addNewLocation() {
+            if (!isAppRunning) return;
+
+            const lang = currentLanguage === 'device' ? deviceLang : currentLanguage;
+            const promptMessage = lang === 'en'
+                ? 'Enter mobile phone number (with country code, e.g., +972123456789):'
+                : lang === 'he'
+                ? 'הזן מספר טלפון נייד (עם קוד מדינה, לדוגמה, +972123456789):'
+                : `Enter mobile phone number (with country code): (${lang})`;
+
+            const phone = prompt(promptMessage);
+            if (!phone) return; // User canceled or entered nothing
+
+            // Extract country code (e.g., "+972")
+            const countryCodeMatch = phone.match(/^\+(\d{1,3})/);
+            if (!countryCodeMatch) {
+                const errorMessage = lang === 'en'
+                    ? 'Invalid phone number. Please include the country code (e.g., +972).'
+                    : lang === 'he'
+                    ? 'מספר טלפון לא תקין. אנא כלול את קוד המדינה (לדוגמה, +972).'
+                    : `Invalid phone number. Include country code. (${lang})`;
+                alert(errorMessage);
+                return;
+            }
+
+            const countryCode = countryCodeMatch[0];
+            const locationData = countryCodeLocations[countryCode];
+            if (!locationData) {
+                const errorMessage = lang === 'en'
+                    ? 'Location not available for this country code.'
+                    : lang === 'he'
+                    ? 'המיקום אינו זמין עבור קוד מדינה זה.'
+                    : `Location not available for this country code. (${lang})`;
+                alert(errorMessage);
+                return;
+            }
+
+            // Add marker at the simulated location
+            const newMarker = L.marker([locationData.lat, locationData.lng]).addTo(map);
+            const popupText = lang === 'en'
+                ? `Location for ${phone}: ${locationData.name}`
+                : lang === 'he'
+                ? `מיקום עבור ${phone}: ${locationData.name}`
+                : `Location for ${phone}: ${locationData.name} (${lang})`;
+            newMarker.bindPopup(popupText);
+            newMarker.phone = phone; // Store phone number in marker for saving
+            newMarker.country = locationData.name; // Store country name for saving
+            customMarkers.push(newMarker);
+            saveCustomLocations();
+        }
+
+        // Function to forget all custom locations
+        function forgetLocations() {
+            if (!isAppRunning) return;
+
+            // Remove all custom markers from the map
+            customMarkers.forEach(marker => marker.remove());
+            customMarkers = [];
+            localStorage.removeItem('customLocations');
+        }
+
+        // Function to set the language and update button styles
+        function setLanguage(lang) {
+            currentLanguage = lang;
+            // Update selected button styling
+            document.getElementById('lang-en').classList.toggle('selected', lang === 'en');
+            document.getElementById('lang-device').classList.toggle('selected', lang === 'device');
+            updateMapLanguage();
+        }
+
+        // Function to update map language and marker
+        function updateMapLanguage() {
+            if (!isAppRunning) return;
+
+            const lang = currentLanguage === 'device' ? deviceLang : currentLanguage;
+
+            // Set text direction for right-to-left languages
+            const isRTL = ['ar', 'he', 'fa', 'ur'].includes(lang); // Example RTL languages
+            document.getElementById('map').setAttribute('dir', isRTL ? 'rtl' : 'ltr');
+
+            // Remove existing marker and tile layer
+            if (marker) marker.remove();
+            map.eachLayer(layer => {
+                if (layer instanceof L.TileLayer) map.removeLayer(layer);
+            });
+
+            // Add OpenStreetMap tiles with language-specific attribution
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                attribution: lang === 'en'
+                    ? '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+                    : lang === 'he'
+                    ? 'נתוני מפה © <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+                    : `Map data © <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> (${lang})`,
+                maxZoom: 19,
+            }).addTo(map);
+
+            // Customize popup based on language
+            const hasLocation = window.currentLocation != null;
+            const popupText = lang === 'en'
+                ? (hasLocation ? 'Your current location!' : 'Default location (London)') + '<br> You can zoom and pan the map.'
+                : lang === 'he'
+                ? (hasLocation ? 'המיקום הנוכחי שלך!' : 'מיקום ברירת מחדל (לונדון)') + '<br> ניתן להתקרב ולהזיז את המפה.'
+                : (hasLocation ? `Your location (${lang})` : `Default location (${lang})`) + '<br>Zoom and pan the map.';
+
+            // Update marker with current or default location
+            const location = window.currentLocation || [51.505, -0.09];
+            marker = L.marker(location).addTo(map)
+                .bindPopup(popupText)
+                .openPopup();
+
+            // Update custom markers' popups
+            customMarkers.forEach(m => {
+                const popupText = lang === 'en'
+                    ? `Location for ${m.phone}: ${m.country}`
+                    : lang === 'he'
+                    ? `מיקום עבור ${m.phone}: ${m.country}`
+                    : `Location for ${m.phone}: ${m.country} (${lang})`;
+                m.setPopupContent(popupText);
+            });
+        }
+
+        // Function to shut down (minimize) the application with countdown
+        function shutdownApp() {
+            const lang = currentLanguage === 'device' ? deviceLang : currentLanguage;
+
+            // Prompt for confirmation
+            const confirmMessage = lang === 'en'
+                ? 'Are you sure you want to minimize the application?'
+                : lang === 'he'
+                ? 'האם אתה בטוח שברצונך למזער את היישום?'
+                : `Are you sure you want to minimize the application? (${lang})`;
+            const userConfirmed = confirm(confirmMessage);
+
+            if (!userConfirmed) return; // Do nothing if user cancels
+
+            isAppRunning = false;
+
+            // Remove map, marker, and custom markers
+            if (marker) marker.remove();
+            customMarkers.forEach(m => m.remove());
+            map.remove();
+            const mapContainer = document.getElementById('map-container');
+            mapContainer.innerHTML = '';
+
+            // Clear custom locations from localStorage
+            localStorage.removeItem('customLocations');
+            customMarkers = [];
+
+            // Create toast bar for countdown
+            const toast = document.createElement('div');
+            toast.className = 'toast-bar';
+            mapContainer.appendChild(toast);
+
+            // Start countdown
+            let countdown = 3;
+            toast.textContent = lang === 'en'
+                ? `Application will close in ${countdown}`
+                : lang === 'he'
+                ? `היישום ייסגר בעוד ${countdown}`
+                : `Application will close in ${countdown} (${lang})`;
+
+            const countdownInterval = setInterval(() => {
+                countdown--;
+                if (countdown > 0) {
+                    toast.textContent = lang === 'en'
+                        ? `Application will close in ${countdown}`
+                        : lang === 'he'
+                        ? `היישום ייסגר בעוד ${countdown}`
+                        : `Application will close in ${countdown} (${lang})`;
+                } else {
+                    clearInterval(countdownInterval);
+                    // Remove toast bar
+                    toast.remove();
+                    // Display minimize message
+                    const minimizeMessage = lang === 'en'
+                        ? 'Please minimize the application by pressing the Home button'
+                        : lang === 'he'
+                        ? 'אנא מזער את היישום על ידי לחיצה על כפתור הבית'
+                        : `Please minimize the application by pressing the Home button (${lang})`;
+                    const messageDiv = document.createElement('div');
+                    messageDiv.className = 'minimize-message';
+                    messageDiv.textContent = minimizeMessage;
+                    mapContainer.appendChild(messageDiv);
+                }
+            }, 1000); // Update every 1 second
+        }
+
+        // Function to refresh the page
+        function refreshPage() {
+            localStorage.setItem('hasRefreshed', 'true');
+            location.reload();
+        }
+
+        // Function to get current location
+        function getCurrentLocation() {
+            // Check for secure context (HTTPS)
+            if (window.location.protocol !== 'https:') {
+                alert('This application requires a secure connection (HTTPS) to access your location. Please host the app on an HTTPS server or use a service like GitHub Pages.');
+                window.currentLocation = null;
+                updateMapLanguage();
+                return;
+            }
+
+            if (navigator.geolocation) {
+                navigator.geolocation.getCurrentPosition(
+                    position => {
+                        const { latitude, longitude } = position.coords;
+                        window.currentLocation = [latitude, longitude];
+                        map.setView(window.currentLocation, 13); // Center map on user location
+                        updateMapLanguage(); // Update map with new location
+                    },
+                    error => {
+                        let errorMessage = 'Unable to retrieve location. Using default location (London).';
+                        switch (error.code) {
+                            case error.PERMISSION_DENIED:
+                                errorMessage = 'Location permission denied. Please allow location access in your browser settings and refresh the page.';
+                                break;
+                            case error.POSITION_UNAVAILABLE:
+                                errorMessage = 'Location information is unavailable. Please ensure location services are enabled on your device.';
+                                break;
+                            case error.TIMEOUT:
+                                errorMessage = 'Location request timed out. Please check your network connection and try again.';
+                                break;
+                            default:
+                                errorMessage = 'An unknown error occurred while retrieving location.';
+                                break;
+                        }
+                        console.error('Geolocation error:', error);
+                        alert(errorMessage);
+                        window.currentLocation = null;
+                        updateMapLanguage();
+                    },
+                    {
+                        enableHighAccuracy: true,
+                        timeout: 10000,
+                        maximumAge: 0
+                    }
+                );
+            } else {
+                console.error('Geolocation not supported');
+                alert('Geolocation is not supported by your browser. Using default location (London).');
+                window.currentLocation = null;
+                updateMapLanguage();
+            }
+        }
+
+        // Set default to device language and initialize map
+        setLanguage('device'); // Default to device language
+
+        // Load custom locations
+        loadCustomLocations();
+
+        // Only fetch location if the page has been refreshed
+        if (localStorage.getItem('hasRefreshed') === 'true') {
+            getCurrentLocation();
+        } else {
+            window.currentLocation = null; // Ensure default location is used
+            updateMapLanguage(); // Initialize map with default location
+        }
+    </script>
+</body>
+</html>
