@@ -17,7 +17,6 @@
             flex-direction: column;
             align-items: center;
             background-color: #f0f0f0;
-            overflow-x: hidden; /* Prevent horizontal scroll when menu is open */
         }
         h1 {
             color: #333;
@@ -29,7 +28,7 @@
             max-width: 800px;
         }
         .map-container {
-            position: relative; /* To position buttons, toast, and message inside */
+            position: relative; /* To position buttons and toast inside */
             width: 100%;
             height: 500px;
             border: 2px solid #ccc;
@@ -45,7 +44,7 @@
             direction: rtl;
             text-align: right;
         }
-        /* Button bar container (language buttons only) */
+        /* Button bar container (exit + language buttons) */
         .button-bar {
             position: absolute;
             top: 20px; /* 2 cm below the upper boundary of the map container */
@@ -81,74 +80,15 @@
             background-color: #333;
             border: 2px solid #fff;
         }
-        /* Menu toggle button (hamburger icon) */
-        .menu-toggle {
-            position: absolute;
-            top: 10px;
-            left: 10px;
-            width: 32px;
-            height: 32px;
-            border: none;
-            border-radius: 50%;
+        /* Exit button styling */
+        .exit-button {
+            background-image: url('https://www.iconarchive.com/download/i51095/oxygen-icons.org/oxygen/Actions-system-shutdown.ico');
+            background-size: contain;
+            background-position: center;
+            background-repeat: no-repeat;
             background-color: #666;
-            color: white;
-            font-size: 16px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            cursor: pointer;
-            z-index: 1000;
-            transition: background-color 0.3s;
         }
-        .menu-toggle:hover {
-            background-color: #555;
-        }
-        /* Side menu styling */
-        .side-menu {
-            position: fixed;
-            top: 0;
-            left: -250px; /* Hidden by default */
-            width: 250px;
-            height: 100%;
-            background-color: #333;
-            color: white;
-            padding: 20px;
-            box-shadow: 2px 0 5px rgba(0, 0, 0, 0.5);
-            transition: left 0.3s ease-in-out;
-            z-index: 2000;
-        }
-        .side-menu.open {
-            left: 0; /* Slide in when open */
-        }
-        .side-menu .close-btn {
-            position: absolute;
-            top: 10px;
-            right: 10px;
-            background: none;
-            border: none;
-            color: white;
-            font-size: 20px;
-            cursor: pointer;
-        }
-        .side-menu h2 {
-            margin: 0 0 20px 0;
-            font-size: 20px;
-        }
-        .side-menu button {
-            display: block;
-            width: 100%;
-            padding: 10px;
-            margin-bottom: 10px;
-            background-color: #666;
-            color: white;
-            border: none;
-            border-radius: 5px;
-            font-size: 16px;
-            cursor: pointer;
-            text-align: left;
-            transition: background-color 0.3s;
-        }
-        .side-menu button:hover {
+        .exit-button:hover {
             background-color: #555;
         }
         /* Toast bar styling */
@@ -165,47 +105,24 @@
             z-index: 1001;
             text-align: center;
         }
-        /* Minimize message styling */
-        .minimize-message {
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            height: 100%;
-            font-size: 20px;
-            color: #333;
-            text-align: center;
-            padding: 20px;
-        }
     </style>
 </head>
 <body>
     <h1>Live-Runners Map</h1>
     <div class="map-wrapper">
         <div class="map-container" id="map-container">
-            <button class="menu-toggle" onclick="toggleMenu()" title="Open Menu">☰</button>
             <div class="button-bar">
+                <button class="exit-button" onclick="shutdownApp()" title="Exit Application"></button>
                 <button class="language-button" id="lang-en" onclick="setLanguage('en')">EN</button>
                 <button class="language-button" id="lang-device" onclick="setLanguage('device')"></button>
             </div>
             <div id="map"></div>
         </div>
     </div>
-
-    <!-- Side Menu -->
-    <div class="side-menu" id="side-menu">
-        <button class="close-btn" onclick="toggleMenu()">×</button>
-        <h2>Menu</h2>
-        <button onclick="shutdownApp()">Minimize Application</button>
-        <button onclick="refreshPage()">Refresh Map</button>
-        <button onclick="addNewLocation()">Add New Location</button>
-        <button onclick="forgetLocations()">Forget Locations</button>
-    </div>
-
     <script>
         // Initialize the map with a default location (fallback)
         let map = L.map('map').setView([51.505, -0.09], 13); // Centered on London
         let marker;
-        let customMarkers = []; // Store custom markers
         let isAppRunning = true;
         let currentLanguage = 'device'; // Default to device language
         let deviceLang = navigator.language || navigator.userLanguage || 'en';
@@ -213,118 +130,6 @@
 
         // Set the device language button text
         document.getElementById('lang-device').textContent = deviceLang.toUpperCase();
-
-        // Check if the page has been refreshed
-        if (!localStorage.getItem('hasRefreshed')) {
-            localStorage.setItem('hasRefreshed', 'false');
-        }
-
-        // Mapping of country codes to coordinates (simulated locations)
-        const countryCodeLocations = {
-            '+972': { lat: 32.0853, lng: 34.7818, name: 'Israel (Tel Aviv)' }, // Israel
-            '+1': { lat: 40.7128, lng: -74.0060, name: 'USA (New York)' }, // USA
-            '+44': { lat: 51.5074, lng: -0.1278, name: 'UK (London)' }, // UK
-            '+33': { lat: 48.8566, lng: 2.3522, name: 'France (Paris)' }, // France
-            '+81': { lat: 35.6762, lng: 139.6503, name: 'Japan (Tokyo)' } // Japan
-        };
-
-        // Function to toggle the side menu
-        function toggleMenu() {
-            const menu = document.getElementById('side-menu');
-            menu.classList.toggle('open');
-        }
-
-        // Load custom locations from localStorage
-        function loadCustomLocations() {
-            const storedLocations = localStorage.getItem('customLocations');
-            if (storedLocations) {
-                customMarkers = JSON.parse(storedLocations).map(loc => {
-                    const marker = L.marker([loc.lat, loc.lng]).addTo(map);
-                    const popupText = currentLanguage === 'en'
-                        ? `Location for ${loc.phone}: ${loc.country}`
-                        : currentLanguage === 'he'
-                        ? `מיקום עבור ${loc.phone}: ${loc.country}`
-                        : `Location for ${loc.phone}: ${loc.country} (${currentLanguage})`;
-                    marker.bindPopup(popupText);
-                    return marker;
-                });
-            }
-        }
-
-        // Save custom locations to localStorage
-        function saveCustomLocations() {
-            const locations = customMarkers.map(marker => ({
-                lat: marker.getLatLng().lat,
-                lng: marker.getLatLng().lng,
-                phone: marker.phone,
-                country: marker.country
-            }));
-            localStorage.setItem('customLocations', JSON.stringify(locations));
-        }
-
-        // Function to add a new location based on phone number
-        function addNewLocation() {
-            if (!isAppRunning) return;
-
-            const lang = currentLanguage === 'device' ? deviceLang : currentLanguage;
-            const promptMessage = lang === 'en'
-                ? 'Enter mobile phone number (with country code, e.g., +972123456789):'
-                : lang === 'he'
-                ? 'הזן מספר טלפון נייד (עם קוד מדינה, לדוגמה, +972123456789):'
-                : `Enter mobile phone number (with country code): (${lang})`;
-
-            const phone = prompt(promptMessage);
-            if (!phone) return; // User canceled or entered nothing
-
-            // Extract country code (e.g., "+972")
-            const countryCodeMatch = phone.match(/^\+(\d{1,3})/);
-            if (!countryCodeMatch) {
-                const errorMessage = lang === 'en'
-                    ? 'Invalid phone number. Please include the country code (e.g., +972).'
-                    : lang === 'he'
-                    ? 'מספר טלפון לא תקין. אנא כלול את קוד המדינה (לדוגמה, +972).'
-                    : `Invalid phone number. Include country code. (${lang})`;
-                alert(errorMessage);
-                return;
-            }
-
-            const countryCode = countryCodeMatch[0];
-            const locationData = countryCodeLocations[countryCode];
-            if (!locationData) {
-                const errorMessage = lang === 'en'
-                    ? 'Location not available for this country code.'
-                    : lang === 'he'
-                    ? 'המיקום אינו זמין עבור קוד מדינה זה.'
-                    : `Location not available for this country code. (${lang})`;
-                alert(errorMessage);
-                return;
-            }
-
-            // Add marker at the simulated location
-            const newMarker = L.marker([locationData.lat, locationData.lng]).addTo(map);
-            const popupText = lang === 'en'
-                ? `Location for ${phone}: ${locationData.name}`
-                : lang === 'he'
-                ? `מיקום עבור ${phone}: ${locationData.name}`
-                : `Location for ${phone}: ${locationData.name} (${lang})`;
-            newMarker.bindPopup(popupText);
-            newMarker.phone = phone; // Store phone number in marker for saving
-            newMarker.country = locationData.name; // Store country name for saving
-            customMarkers.push(newMarker);
-            saveCustomLocations();
-            toggleMenu(); // Close the menu after action
-        }
-
-        // Function to forget all custom locations
-        function forgetLocations() {
-            if (!isAppRunning) return;
-
-            // Remove all custom markers from the map
-            customMarkers.forEach(marker => marker.remove());
-            customMarkers = [];
-            localStorage.removeItem('customLocations');
-            toggleMenu(); // Close the menu after action
-        }
 
         // Function to set the language and update button styles
         function setLanguage(lang) {
@@ -362,64 +167,48 @@
             }).addTo(map);
 
             // Customize popup based on language
-            const hasLocation = window.currentLocation != null;
             const popupText = lang === 'en'
-                ? (hasLocation ? 'Your current location!' : 'Default location (London)') + '<br> You can zoom and pan the map.'
+                ? (window.currentLocation ? 'Your current location!' : 'Default location (London)') + '<br> You can zoom and pan the map.'
                 : lang === 'he'
-                ? (hasLocation ? 'המיקום הנוכחי שלך!' : 'מיקום ברירת מחדל (לונדון)') + '<br> ניתן להתקרב ולהזיז את המפה.'
-                : (hasLocation ? `Your location (${lang})` : `Default location (${lang})`) + '<br>Zoom and pan the map.';
+                ? (window.currentLocation ? 'המיקום הנוכחי שלך!' : 'מיקום ברירת מחדל (לונדון)') + '<br> ניתן להתקרב ולהזיז את המפה.'
+                : (window.currentLocation ? `Your location (${lang})` : `Default location (${lang})`) + '<br>Zoom and pan the map.';
 
             // Update marker with current or default location
-            const location = window.currentLocation || [51.505, -0.09];
+            const location = window.currentLocation || [51.5, -0.09];
             marker = L.marker(location).addTo(map)
                 .bindPopup(popupText)
                 .openPopup();
-
-            // Update custom markers' popups
-            customMarkers.forEach(m => {
-                const popupText = lang === 'en'
-                    ? `Location for ${m.phone}: ${m.country}`
-                    : lang === 'he'
-                    ? `מיקום עבור ${m.phone}: ${m.country}`
-                    : `Location for ${m.phone}: ${m.country} (${lang})`;
-                m.setPopupContent(popupText);
-            });
         }
 
-        // Function to shut down (minimize) the application with countdown
+        // Function to shut down the application
         function shutdownApp() {
             const lang = currentLanguage === 'device' ? deviceLang : currentLanguage;
 
             // Prompt for confirmation
             const confirmMessage = lang === 'en'
-                ? 'Are you sure you want to minimize the application?'
+                ? 'Are you sure you want to close the application?'
                 : lang === 'he'
-                ? 'האם אתה בטוח שברצונך למזער את היישום?'
-                : `Are you sure you want to minimize the application? (${lang})`;
+                ? 'האם אתה בטוח שברצונך לסגור את היישום?'
+                : `Are you sure you want to close the application? (${lang})`;
             const userConfirmed = confirm(confirmMessage);
 
             if (!userConfirmed) return; // Do nothing if user cancels
 
             isAppRunning = false;
 
-            // Remove map, marker, and custom markers
+            // Remove map and marker
             if (marker) marker.remove();
-            customMarkers.forEach(m => m.remove());
             map.remove();
             const mapContainer = document.getElementById('map-container');
             mapContainer.innerHTML = '';
 
-            // Clear custom locations from localStorage
-            localStorage.removeItem('customLocations');
-            customMarkers = [];
-
-            // Create toast bar for countdown
+            // Create toast bar
             const toast = document.createElement('div');
             toast.className = 'toast-bar';
             mapContainer.appendChild(toast);
 
             // Start countdown
-            let countdown = 3;
+            let countdown = 5;
             toast.textContent = lang === 'en'
                 ? `Application will close in ${countdown}`
                 : lang === 'he'
@@ -436,29 +225,17 @@
                         : `Application will close in ${countdown} (${lang})`;
                 } else {
                     clearInterval(countdownInterval);
-                    // Remove toast bar
-                    toast.remove();
-                    // Display minimize message
-                    const minimizeMessage = lang === 'en'
-                        ? 'Please minimize the application by pressing the Home button'
+                    // Attempt to close the tab
+                    window.close();
+                    // Fallback message if window.close() fails
+                    const fallbackMessage = lang === 'en'
+                        ? 'Please close the window manually'
                         : lang === 'he'
-                        ? 'אנא מזער את היישום על ידי לחיצה על כפתור הבית'
-                        : `Please minimize the application by pressing the Home button (${lang})`;
-                    const messageDiv = document.createElement('div');
-                    messageDiv.className = 'minimize-message';
-                    messageDiv.textContent = minimizeMessage;
-                    mapContainer.appendChild(messageDiv);
+                        ? 'אנא סגור את החלון ידנית'
+                        : `Please close the window manually (${lang})`;
+                    toast.textContent = fallbackMessage;
                 }
             }, 1000); // Update every 1 second
-
-            toggleMenu(); // Close the menu after action
-        }
-
-        // Function to refresh the page
-        function refreshPage() {
-            localStorage.setItem('hasRefreshed', 'true');
-            location.reload();
-            toggleMenu(); // Close the menu after action
         }
 
         // Function to get current location
@@ -501,9 +278,9 @@
                         updateMapLanguage();
                     },
                     {
-                        enableHighAccuracy: true,
-                        timeout: 10000,
-                        maximumAge: 0
+                        enableHighAccuracy: true, // Try to get precise location (GPS if available)
+                        timeout: 10000, // 10-second timeout
+                        maximumAge: 0 // Don't use cached location
                     }
                 );
             } else {
@@ -514,19 +291,9 @@
             }
         }
 
-        // Set default to device language and initialize map
+        // Set default to device language and get location
         setLanguage('device'); // Default to device language
-
-        // Load custom locations
-        loadCustomLocations();
-
-        // Only fetch location if the page has been refreshed
-        if (localStorage.getItem('hasRefreshed') === 'true') {
-            getCurrentLocation();
-        } else {
-            window.currentLocation = null; // Ensure default location is used
-            updateMapLanguage(); // Initialize map with default location
-        }
+        getCurrentLocation();
     </script>
 </body>
 </html>
