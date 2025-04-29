@@ -17,6 +17,7 @@
             flex-direction: column;
             align-items: center;
             background-color: #f0f0f0;
+            overflow-x: hidden;
         }
         h1 {
             color: #333;
@@ -28,7 +29,7 @@
             max-width: 800px;
         }
         .map-container {
-            position: relative; /* To position buttons, toast, and message inside */
+            position: relative;
             width: 100%;
             height: 500px;
             border: 2px solid #ccc;
@@ -39,15 +40,13 @@
             width: 100%;
             height: 100%;
         }
-        /* Ensure right-to-left text for device language if applicable */
         [dir="rtl"] {
             direction: rtl;
             text-align: right;
         }
-        /* Button bar container (exit + language + refresh + add buttons) */
         .button-bar {
             position: absolute;
-            top: 20px; /* 2 cm below the upper boundary of the map container */
+            top: 20px;
             left: 50%;
             transform: translateX(-50%);
             display: flex;
@@ -55,7 +54,6 @@
             justify-content: center;
             z-index: 1000;
         }
-        /* Shared button styling */
         .button-bar button {
             width: 32px;
             height: 32px;
@@ -68,7 +66,6 @@
             cursor: pointer;
             transition: background-color 0.3s;
         }
-        /* Language button styling */
         .language-button {
             background-color: #666;
             color: white;
@@ -80,36 +77,74 @@
             background-color: #333;
             border: 2px solid #fff;
         }
-        /* Exit button styling */
-        .exit-button {
-            background-image: url('https://www.iconarchive.com/download/i51095/oxygen-icons.org/oxygen/Actions-system-shutdown.ico');
-            background-size: contain;
-            background-position: center;
-            background-repeat: no-repeat;
-            background-color: #666;
-        }
-        .exit-button:hover {
-            background-color: #555;
-        }
-        /* Refresh button styling */
-        .refresh-button {
+        .menu-toggle {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            width: 32px;
+            height: 32px;
+            border: none;
+            border-radius: 50%;
             background-color: #666;
             color: white;
             font-size: 16px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            z-index: 1000;
+            transition: background-color 0.3s;
         }
-        .refresh-button:hover {
+        .menu-toggle:hover {
             background-color: #555;
         }
-        /* Add location button styling */
-        .add-button {
+        .side-menu {
+            position: fixed;
+            top: 0;
+            left: -250px;
+            width: 250px;
+            height: 100%;
+            background-color: #333;
+            color: white;
+            padding: 20px;
+            box-shadow: 2px 0 5px rgba(0, 0, 0, 0.5);
+            transition: left 0.3s ease-in-out;
+            z-index: 2000;
+        }
+        .side-menu.open {
+            left: 0;
+        }
+        .side-menu .close-btn {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            background: none;
+            border: none;
+            color: white;
+            font-size: 20px;
+            cursor: pointer;
+        }
+        .side-menu h2 {
+            margin: 0 0 20px 0;
+            font-size: 20px;
+        }
+        .side-menu button {
+            display: block;
+            width: 100%;
+            padding: 10px;
+            margin-bottom: 10px;
             background-color: #666;
             color: white;
+            border: none;
+            border-radius: 5px;
             font-size: 16px;
+            cursor: pointer;
+            text-align: left;
+            transition: background-color 0.3s;
         }
-        .add-button:hover {
+        .side-menu button:hover {
             background-color: #555;
         }
-        /* Toast bar styling */
         .toast-bar {
             position: absolute;
             top: 0;
@@ -123,7 +158,6 @@
             z-index: 1001;
             text-align: center;
         }
-        /* Minimize message styling */
         .minimize-message {
             display: flex;
             align-items: center;
@@ -140,25 +174,38 @@
     <h1>Live-Runners Map</h1>
     <div class="map-wrapper">
         <div class="map-container" id="map-container">
+            <button class="menu-toggle" onclick="toggleMenu()" title="Open Menu">☰</button>
             <div class="button-bar">
-                <button class="exit-button" onclick="shutdownApp()" title="Minimize Application"></button>
                 <button class="language-button" id="lang-en" onclick="setLanguage('en')">EN</button>
                 <button class="language-button" id="lang-device" onclick="setLanguage('device')"></button>
-                <button class="refresh-button" onclick="refreshPage()" title="Refresh Map">⟳</button>
-                <button class="add-button" onclick="addNewLocation()" title="Add New Location">+</button>
             </div>
             <div id="map"></div>
         </div>
     </div>
+
+    <!-- Side Menu -->
+    <div class="side-menu" id="side-menu">
+        <button class="close-btn" onclick="toggleMenu()">×</button>
+        <h2>Menu</h2>
+        <button onclick="shutdownApp()">Minimize Application</button>
+        <button onclick="refreshPage()">Refresh Map</button>
+        <button onclick="addNewLocation()">Add New Location</button>
+        <button onclick="addGasStations()">Add Gas Stations</button>
+        <button onclick="forgetLocations()">Forget Locations</button>
+    </div>
+
     <script>
-        // Initialize the map with a default location (fallback)
-        let map = L.map('map').setView([51.505, -0.09], 13); // Centered on London
+        // Initialize variables
+        let map;
         let marker;
-        let customMarkers = []; // Store custom markers
+        let customMarkers = [];
+        let gasStationMarkers = [];
         let isAppRunning = true;
-        let currentLanguage = 'device'; // Default to device language
+        let currentLanguage = 'device';
         let deviceLang = navigator.language || navigator.userLanguage || 'en';
-        deviceLang = deviceLang.split('-')[0]; // Simplify to primary language code
+        deviceLang = deviceLang.split('-')[0];
+        let userLat = 51.505; // Default latitude (London)
+        let userLng = -0.09;  // Default longitude (London)
 
         // Set the device language button text
         document.getElementById('lang-device').textContent = deviceLang.toUpperCase();
@@ -170,27 +217,94 @@
 
         // Mapping of country codes to coordinates (simulated locations)
         const countryCodeLocations = {
-            '+972': { lat: 32.0853, lng: 34.7818, name: 'Israel (Tel Aviv)' }, // Israel
-            '+1': { lat: 40.7128, lng: -74.0060, name: 'USA (New York)' }, // USA
-            '+44': { lat: 51.5074, lng: -0.1278, name: 'UK (London)' }, // UK
-            '+33': { lat: 48.8566, lng: 2.3522, name: 'France (Paris)' }, // France
-            '+81': { lat: 35.6762, lng: 139.6503, name: 'Japan (Tokyo)' } // Japan
+            '+972': { lat: 32.0853, lng: 34.7818, name: 'Israel (Tel Aviv)' },
+            '+1': { lat: 40.7128, lng: -74.0060, name: 'USA (New York)' },
+            '+44': { lat: 51.5074, lng: -0.1278, name: 'UK (London)' },
+            '+33': { lat: 48.8566, lng: 2.3522, name: 'France (Paris)' },
+            '+81': { lat: 35.6762, lng: 139.6503, name: 'Japan (Tokyo)' }
         };
+
+        // Simulated gas stations data (hardcoded for demonstration)
+        const gasStationsData = [
+            { name: 'Shell', address: '123 King’s Road, London', lat: 51.4870, lng: -0.1688 },
+            { name: 'BP', address: '456 High Street, London', lat: 51.5150, lng: -0.1410 },
+            { name: 'Esso', address: '789 Station Road, Oxford', lat: 51.7520, lng: -1.2570 }
+        ];
+
+        // Red icon for gas stations
+        let redIcon;
+        try {
+            redIcon = new L.Icon({
+                iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-red.png',
+                shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-shadow.png',
+                iconSize: [25, 41],
+                iconAnchor: [12, 41],
+                popupAnchor: [1, -34],
+                shadowSize: [41, 41]
+            });
+        } catch (e) {
+            console.error('Error loading red icon:', e);
+            redIcon = L.Icon.Default;
+        }
+
+        // Function to calculate distance between two points (Haversine formula)
+        function calculateDistance(lat1, lon1, lat2, lon2) {
+            const R = 6371; // Earth's radius in km
+            const dLat = (lat2 - lat1) * Math.PI / 180;
+            const dLon = (lon2 - lon1) * Math.PI / 180;
+            const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+                      Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+                      Math.sin(dLon / 2) * Math.sin(dLon / 2);
+            const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+            return R * c; // Distance in km
+        }
+
+        // Function to toggle the side menu
+        function toggleMenu() {
+            const menu = document.getElementById('side-menu');
+            menu.classList.toggle('open');
+        }
 
         // Load custom locations from localStorage
         function loadCustomLocations() {
-            const storedLocations = localStorage.getItem('customLocations');
-            if (storedLocations) {
-                customMarkers = JSON.parse(storedLocations).map(loc => {
-                    const marker = L.marker([loc.lat, loc.lng]).addTo(map);
-                    const popupText = currentLanguage === 'en'
-                        ? `Location for ${loc.phone}: ${loc.country}`
-                        : currentLanguage === 'he'
-                        ? `מיקום עבור ${loc.phone}: ${loc.country}`
-                        : `Location for ${loc.phone}: ${loc.country} (${currentLanguage})`;
-                    marker.bindPopup(popupText);
-                    return marker;
-                });
+            try {
+                const storedLocations = localStorage.getItem('customLocations');
+                if (storedLocations) {
+                    customMarkers = JSON.parse(storedLocations).map(loc => {
+                        const marker = L.marker([loc.lat, loc.lng]).addTo(map);
+                        const popupText = currentLanguage === 'en'
+                            ? `Location for ${loc.phone}: ${loc.country}`
+                            : currentLanguage === 'he'
+                            ? `מיקום עבור ${loc.phone}: ${loc.country}`
+                            : `Location for ${loc.phone}: ${loc.country} (${currentLanguage})`;
+                        marker.bindPopup(popupText);
+                        return marker;
+                    });
+                }
+            } catch (e) {
+                console.error('Error loading custom locations from localStorage:', e);
+                localStorage.removeItem('customLocations');
+            }
+        }
+
+        // Load gas stations from localStorage
+        function loadGasStations() {
+            try {
+                const storedGasStations = localStorage.getItem('gasStations');
+                if (storedGasStations) {
+                    const stations = JSON.parse(storedGasStations);
+                    stations.forEach(station => {
+                        const distance = calculateDistance(userLat, userLng, station.lat, station.lng);
+                        if (distance <= 20) {
+                            const marker = L.marker([station.lat, station.lng], { icon: redIcon }).addTo(map);
+                            marker.bindPopup(station.popupText);
+                            gasStationMarkers.push(marker);
+                        }
+                    });
+                }
+            } catch (e) {
+                console.error('Error loading gas stations from localStorage:', e);
+                localStorage.removeItem('gasStations');
             }
         }
 
@@ -205,6 +319,16 @@
             localStorage.setItem('customLocations', JSON.stringify(locations));
         }
 
+        // Save gas stations to localStorage
+        function saveGasStations() {
+            const stations = gasStationMarkers.map(marker => ({
+                lat: marker.getLatLng().lat,
+                lng: marker.getLatLng().lng,
+                popupText: marker.getPopup().getContent()
+            }));
+            localStorage.setItem('gasStations', JSON.stringify(stations));
+        }
+
         // Function to add a new location based on phone number
         function addNewLocation() {
             if (!isAppRunning) return;
@@ -217,9 +341,8 @@
                 : `Enter mobile phone number (with country code): (${lang})`;
 
             const phone = prompt(promptMessage);
-            if (!phone) return; // User canceled or entered nothing
+            if (!phone) return;
 
-            // Extract country code (e.g., "+972")
             const countryCodeMatch = phone.match(/^\+(\d{1,3})/);
             if (!countryCodeMatch) {
                 const errorMessage = lang === 'en'
@@ -243,7 +366,6 @@
                 return;
             }
 
-            // Add marker at the simulated location
             const newMarker = L.marker([locationData.lat, locationData.lng]).addTo(map);
             const popupText = lang === 'en'
                 ? `Location for ${phone}: ${locationData.name}`
@@ -251,16 +373,50 @@
                 ? `מיקום עבור ${phone}: ${locationData.name}`
                 : `Location for ${phone}: ${locationData.name} (${lang})`;
             newMarker.bindPopup(popupText);
-            newMarker.phone = phone; // Store phone number in marker for saving
-            newMarker.country = locationData.name; // Store country name for saving
+            newMarker.phone = phone;
+            newMarker.country = locationData.name;
             customMarkers.push(newMarker);
             saveCustomLocations();
+            toggleMenu();
+        }
+
+        // Function to add gas stations within 20 km
+        function addGasStations() {
+            if (!isAppRunning) return;
+
+            gasStationMarkers.forEach(marker => marker.remove());
+            gasStationMarkers = [];
+
+            gasStationsData.forEach(station => {
+                const distance = calculateDistance(userLat, userLng, station.lat, station.lng);
+                if (distance <= 20) {
+                    const marker = L.marker([station.lat, station.lng], { icon: redIcon }).addTo(map);
+                    const popupText = `${station.name}<br>${station.address}`;
+                    marker.bindPopup(popupText);
+                    gasStationMarkers.push(marker);
+                }
+            });
+
+            saveGasStations();
+            toggleMenu();
+        }
+
+        // Function to forget all custom locations and gas stations
+        function forgetLocations() {
+            if (!isAppRunning) return;
+
+            customMarkers.forEach(marker => marker.remove());
+            gasStationMarkers.forEach(marker => marker.remove());
+            customMarkers = [];
+            gasStationMarkers = [];
+            localStorage.removeItem('customLocations');
+            localStorage.removeItem('gasStations');
+            toggleMenu();
         }
 
         // Function to set the language and update button styles
         function setLanguage(lang) {
             currentLanguage = lang;
-            // Update selected button styling
             document.getElementById('lang-en').classList.toggle('selected', lang === 'en');
             document.getElementById('lang-device').classList.toggle('selected', lang === 'device');
             updateMapLanguage();
@@ -272,8 +428,8 @@
 
             const lang = currentLanguage === 'device' ? deviceLang : currentLanguage;
 
-            // Set text direction for right-to-left languages
-            const isRTL = ['ar', 'he', 'fa', 'ur'].includes(lang); // Example RTL languages
+            // Set RTL for languages like Hebrew
+            const isRTL = ['ar', 'he', 'fa', 'ur'].includes(lang);
             document.getElementById('map').setAttribute('dir', isRTL ? 'rtl' : 'ltr');
 
             // Remove existing marker and tile layer
@@ -282,14 +438,15 @@
                 if (layer instanceof L.TileLayer) map.removeLayer(layer);
             });
 
-            // Add OpenStreetMap tiles with language-specific attribution
-            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            // Use CartoDB Voyager tiles (publicly accessible, better rendering)
+            L.tileLayer('https://cartodb-basemaps-{s}.global.ssl.fastly.net/rastertiles/voyager/{z}/{x}/{y}.png', {
                 attribution: lang === 'en'
-                    ? '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+                    ? '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors, © <a href="https://carto.com/attributions">CARTO</a>'
                     : lang === 'he'
-                    ? 'נתוני מפה © <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
-                    : `Map data © <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> (${lang})`,
+                    ? 'נתוני מפה © <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>, © <a href="https://carto.com/attributions">CARTO</a>'
+                    : `Map data © <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>, © <a href="https://carto.com/attributions">CARTO</a> (${lang})`,
                 maxZoom: 19,
+                subdomains: 'abcd'
             }).addTo(map);
 
             // Customize popup based on language
@@ -300,7 +457,6 @@
                 ? (hasLocation ? 'המיקום הנוכחי שלך!' : 'מיקום ברירת מחדל (לונדון)') + '<br> ניתן להתקרב ולהזיז את המפה.'
                 : (hasLocation ? `Your location (${lang})` : `Default location (${lang})`) + '<br>Zoom and pan the map.';
 
-            // Update marker with current or default location
             const location = window.currentLocation || [51.505, -0.09];
             marker = L.marker(location).addTo(map)
                 .bindPopup(popupText)
@@ -315,13 +471,17 @@
                     : `Location for ${m.phone}: ${m.country} (${lang})`;
                 m.setPopupContent(popupText);
             });
+
+            // Update gas station markers' popups (addresses remain untranslated as proper nouns)
+            gasStationMarkers.forEach(m => {
+                m.setPopupContent(m.getPopup().getContent());
+            });
         }
 
         // Function to shut down (minimize) the application with countdown
         function shutdownApp() {
             const lang = currentLanguage === 'device' ? deviceLang : currentLanguage;
 
-            // Prompt for confirmation
             const confirmMessage = lang === 'en'
                 ? 'Are you sure you want to minimize the application?'
                 : lang === 'he'
@@ -329,27 +489,26 @@
                 : `Are you sure you want to minimize the application? (${lang})`;
             const userConfirmed = confirm(confirmMessage);
 
-            if (!userConfirmed) return; // Do nothing if user cancels
+            if (!userConfirmed) return;
 
             isAppRunning = false;
 
-            // Remove map, marker, and custom markers
             if (marker) marker.remove();
             customMarkers.forEach(m => m.remove());
+            gasStationMarkers.forEach(m => m.remove());
             map.remove();
             const mapContainer = document.getElementById('map-container');
             mapContainer.innerHTML = '';
 
-            // Clear custom locations from localStorage
             localStorage.removeItem('customLocations');
+            localStorage.removeItem('gasStations');
             customMarkers = [];
+            gasStationMarkers = [];
 
-            // Create toast bar for countdown
             const toast = document.createElement('div');
             toast.className = 'toast-bar';
             mapContainer.appendChild(toast);
 
-            // Start countdown
             let countdown = 3;
             toast.textContent = lang === 'en'
                 ? `Application will close in ${countdown}`
@@ -367,9 +526,7 @@
                         : `Application will close in ${countdown} (${lang})`;
                 } else {
                     clearInterval(countdownInterval);
-                    // Remove toast bar
                     toast.remove();
-                    // Display minimize message
                     const minimizeMessage = lang === 'en'
                         ? 'Please minimize the application by pressing the Home button'
                         : lang === 'he'
@@ -380,18 +537,20 @@
                     messageDiv.textContent = minimizeMessage;
                     mapContainer.appendChild(messageDiv);
                 }
-            }, 1000); // Update every 1 second
+            }, 1000);
+
+            toggleMenu();
         }
 
         // Function to refresh the page
         function refreshPage() {
             localStorage.setItem('hasRefreshed', 'true');
             location.reload();
+            toggleMenu();
         }
 
         // Function to get current location
         function getCurrentLocation() {
-            // Check for secure context (HTTPS)
             if (window.location.protocol !== 'https:') {
                 alert('This application requires a secure connection (HTTPS) to access your location. Please host the app on an HTTPS server or use a service like GitHub Pages.');
                 window.currentLocation = null;
@@ -404,8 +563,11 @@
                     position => {
                         const { latitude, longitude } = position.coords;
                         window.currentLocation = [latitude, longitude];
-                        map.setView(window.currentLocation, 13); // Center map on user location
-                        updateMapLanguage(); // Update map with new location
+                        userLat = latitude;
+                        userLng = longitude;
+                        map.setView(window.currentLocation, 13);
+                        updateMapLanguage();
+                        loadGasStations();
                     },
                     error => {
                         let errorMessage = 'Unable to retrieve location. Using default location (London).';
@@ -442,18 +604,33 @@
             }
         }
 
-        // Set default to device language and initialize map
-        setLanguage('device'); // Default to device language
+        // Initialize the map with error handling
+        try {
+            const mapElement = document.getElementById('map');
+            if (!mapElement) {
+                throw new Error('Map container element not found');
+            }
+            map = L.map('map').setView([51.505, -0.09], 13);
+            console.log('Map initialized successfully');
+        } catch (e) {
+            console.error('Error initializing map:', e);
+            alert('Failed to initialize the map. Please check the console for details and try refreshing the page.');
+            return;
+        }
 
-        // Load custom locations
+        // Set default to device language and initialize map
+        setLanguage('device');
+
+        // Load custom locations and gas stations
         loadCustomLocations();
+        loadGasStations();
 
         // Only fetch location if the page has been refreshed
         if (localStorage.getItem('hasRefreshed') === 'true') {
             getCurrentLocation();
         } else {
-            window.currentLocation = null; // Ensure default location is used
-            updateMapLanguage(); // Initialize map with default location
+            window.currentLocation = null;
+            updateMapLanguage();
         }
     </script>
 </body>
