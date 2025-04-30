@@ -1,43 +1,4 @@
-<script type="text/javascript">
-        var gk_isXlsx = false;
-        var gk_xlsxFileLookup = {};
-        var gk_fileData = {};
-        function filledCell(cell) {
-          return cell !== '' && cell != null;
-        }
-        function loadFileData(filename) {
-        if (gk_isXlsx && gk_xlsxFileLookup[filename]) {
-            try {
-                var workbook = XLSX.read(gk_fileData[filename], { type: 'base64' });
-                var firstSheetName = workbook.SheetNames[0];
-                var worksheet = workbook.Sheets[firstSheetName];
-
-                // Convert sheet to JSON to filter blank rows
-                var jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1, blankrows: false, defval: '' });
-                // Filter out blank rows (rows where all cells are empty, null, or undefined)
-                var filteredData = jsonData.filter(row => row.some(filledCell));
-
-                // Heuristic to find the header row by ignoring rows with fewer filled cells than the next row
-                var headerRowIndex = filteredData.findIndex((row, index) =>
-                  row.filter(filledCell).length >= filteredData[index + 1]?.filter(filledCell).length
-                );
-                // Fallback
-                if (headerRowIndex === -1 || headerRowIndex > 25) {
-                  headerRowIndex = 0;
-                }
-
-                // Convert filtered JSON back to CSV
-                var csv = XLSX.utils.aoa_to_sheet(filteredData.slice(headerRowIndex)); // Create a new sheet from filtered array of arrays
-                csv = XLSX.utils.sheet_to_csv(csv, { header: 1 });
-                return csv;
-            } catch (e) {
-                console.error(e);
-                return "";
-            }
-        }
-        return gk_fileData[filename] || "";
-        }
-        </script><!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -83,7 +44,7 @@
             direction: rtl;
             text-align: right;
         }
-        /* Button bar container (language buttons only) */
+        /* Button bar container (language buttons and menu button) */
         .button-bar {
             position: absolute;
             top: 20px;
@@ -108,70 +69,87 @@
             transition: background-color 0.3s;
         }
         /* Language button styling */
-        .language-button {
+        .language-button, .menu-button {
             background-color: #666;
             color: white;
         }
-        .language-button:hover {
+        .language-button:hover, .menu-button:hover {
             background-color: #555;
         }
         .language-button.selected {
             background-color: #333;
             border: 2px solid #fff;
         }
-        /* Menu styling (embedded in the page) */
-        .menu {
-            width: 100%;
-            max-width: 800px;
+        /* Popup menu styling */
+        .popup-menu {
+            display: none;
+            position: absolute;
+            top: 60px;
+            left: 50%;
+            transform: translateX(-50%);
             background-color: #333;
             color: white;
-            padding: 20px;
-            margin-top: 20px;
-            border-radius: 8px;
-            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.5);
-        }
-        .menu h2 {
-            margin: 0 0 20px 0;
-            font-size: 20px;
-        }
-        .menu button {
-            display: block;
-            width: 100%;
             padding: 10px;
-            margin-bottom: 10px;
+            border-radius: 5px;
+            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.5);
+            z-index: 1001;
+            min-width: 200px;
+        }
+        .popup-menu.open {
+            display: block;
+        }
+        .popup-menu div {
+            padding: 8px;
+            cursor: pointer;
+            border-radius: 3px;
+            transition: background-color 0.3s;
+        }
+        .popup-menu div:hover {
+            background-color: #555;
+        }
+        /* Map mode sub-menu styling */
+        .map-mode-options {
+            display: none;
+            padding-left: 20px;
+        }
+        .map-mode-options.open {
+            display: block;
+        }
+        .map-mode-options label {
+            display: block;
+            padding: 5px 0;
+            cursor: pointer;
+        }
+        .map-mode-options input[type="radio"] {
+            margin-right: 5px;
+        }
+        /* Custom marker popup styling */
+        .custom-marker-popup {
+            text-align: center;
+        }
+        .custom-marker-popup h3 {
+            margin: 0 0 10px 0;
+            font-size: 16px;
+        }
+        .custom-marker-popup button {
             background-color: #666;
             color: white;
             border: none;
-            border-radius: 5px;
-            font-size: 16px;
+            padding: 5px 10px;
+            border-radius: 3px;
             cursor: pointer;
-            text-align: left;
             transition: background-color 0.3s;
         }
-        .menu button:hover {
+        .custom-marker-popup button:hover {
             background-color: #555;
         }
-        /* Toast bar styling */
-        .toast-bar {
-            position: absolute;
-            top: 0;
-            left: 50%;
-            transform: translateX(-50%);
-            background-color: rgba(0, 0, 0, 0.8);
-            color: white;
-            padding: 10px 20px;
-            border-radius: 5px;
-            font-size: 16px;
-            z-index: 1001;
-            text-align: center;
-        }
-        /* Minimize message styling */
-        .minimize-message {
+        /* Thank you message styling */
+        .thank-you-message {
             display: flex;
             align-items: center;
             justify-content: center;
-            height: 100%;
-            font-size: 20px;
+            height: 100vh;
+            font-size: 24px;
             color: #333;
             text-align: center;
             padding: 20px;
@@ -185,18 +163,22 @@
             <div class="button-bar">
                 <button class="language-button" id="lang-en" onclick="setLanguage('en')">EN</button>
                 <button class="language-button" id="lang-device" onclick="setLanguage('device')"></button>
+                <button class="menu-button" id="menu-btn">☰</button>
             </div>
             <div id="map"></div>
+            <!-- Popup menu -->
+            <div class="popup-menu" id="popup-menu">
+                <div id="add-position" onclick="addPosition()">Add Position</div>
+                <div id="remove-all-positions" onclick="removeAllPositions()">Remove All Positions</div>
+                <div id="map-mode" onclick="toggleMapModeOptions()">Map Mode</div>
+                <div class="map-mode-options" id="map-mode-options">
+                    <label><input type="radio" name="map-mode" value="roadmap" checked onclick="changeMapMode('roadmap')"> Roadmap</label>
+                    <label><input type="radio" name="map-mode" value="satellite" onclick="changeMapMode('satellite')"> Satellite</label>
+                    <label><input type="radio" name="map-mode" value="hybrid" onclick="changeMapMode('hybrid')"> Hybrid</label>
+                </div>
+                <div id="shutdown" onclick="shutdown()">Shutdown</div>
+            </div>
         </div>
-    </div>
-
-    <!-- Menu (embedded in the page) -->
-    <div class="menu" id="menu">
-        <h2 id="menu-title">Menu</h2>
-        <button id="minimize-app-btn" onclick="shutdownApp()">Minimize Application</button>
-        <button id="refresh-map-btn" onclick="refreshPage()">Refresh Map</button>
-        <button id="add-location-btn" onclick="addNewLocation()">Add New Location</button>
-        <button id="forget-locations-btn" onclick="forgetLocations()">Forget Locations</button>
     </div>
 
     <script>
@@ -208,25 +190,33 @@
         let currentLanguage = 'device'; // Default to device language
         let deviceLang = navigator.language || navigator.userLanguage || 'en';
         deviceLang = deviceLang.split('-')[0]; // Simplify to primary language code
+        let currentMapMode = 'roadmap'; // Default map mode
 
         // Translation object
         const translations = {
             en: {
                 pageTitle: "Live-Runners Map",
-                menuTitle: "Menu",
-                minimizeApp: "Minimize Application",
-                refreshMap: "Refresh Map",
-                addLocation: "Add New Location",
-                forgetLocations: "Forget Locations",
-                addLocationPrompt: "Enter mobile phone number (with country code, e.g., +972123456789):",
+                menuButton: "Menu",
+                addPosition: "Add Position",
+                removeAllPositions: "Remove All Positions (except current location)",
+                mapMode: "Map Mode",
+                mapModeRoadmap: "Roadmap",
+                mapModeSatellite: "Satellite",
+                mapModeHybrid: "Hybrid",
+                shutdown: "Shutdown",
+                addPositionPhonePrompt: "Enter mobile phone number (with country code, e.g., +972123456789):",
+                addPositionNamePrompt: "Enter an optional name for this position (leave blank to skip):",
                 invalidPhone: "Invalid phone number. Please include the country code (e.g., +972).",
                 locationNotAvailable: "Location not available for this country code.",
-                markerPopup: "Location for {phone}: {country}",
+                markerPopupTitle: (name, phone) => name || phone,
+                removePosition: "Remove Position",
                 mainMarkerPopup: (hasLocation) => hasLocation ? "Your current location!<br> You can zoom and pan the map." : "Default location (London)<br> You can zoom and pan the map.",
-                mapAttribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
-                confirmMinimize: "Are you sure you want to minimize the application?",
-                countdownMessage: (count) => `Application will close in ${count}`,
-                minimizeMessage: "Please minimize the application by pressing the Home button",
+                mapAttribution: {
+                    roadmap: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+                    satellite: '© Esri, Maxar, Earthstar Geographics, and the GIS User Community',
+                    hybrid: '© Esri, Maxar, Earthstar Geographics, and the GIS User Community'
+                },
+                thankYouMessage: "Thank you for using Live-Runners Map",
                 locationErrorDefault: "Unable to retrieve location. Using default location (London).",
                 locationErrorPermission: "Location permission denied. Please allow location access in your browser settings and refresh the page.",
                 locationErrorUnavailable: "Location information is unavailable. Please ensure location services are enabled on your device.",
@@ -237,20 +227,27 @@
             },
             he: {
                 pageTitle: "מפת רצים חיה",
-                menuTitle: "תפריט",
-                minimizeApp: "מזער את היישום",
-                refreshMap: "רענן את המפה",
-                addLocation: "הוסף מיקום חדש",
-                forgetLocations: "שכח מיקומים",
-                addLocationPrompt: "הזן מספר טלפון נייד (עם קוד מדינה, לדוגמה, +972123456789):",
+                menuButton: "תפריט",
+                addPosition: "הוסף מיקום",
+                removeAllPositions: "הסר את כל המיקומים (למעט המיקום הנוכחי)",
+                mapMode: "מצב מפה",
+                mapModeRoadmap: "מפת דרכים",
+                mapModeSatellite: "לוויין",
+                mapModeHybrid: "היברידי",
+                shutdown: "כיבוי",
+                addPositionPhonePrompt: "הזן מספר טלפון נייד (עם קוד מדינה, לדוגמה, +972123456789):",
+                addPositionNamePrompt: "הזן שם אופציונלי למיקום זה (השאר ריק כדי לדלג):",
                 invalidPhone: "מספר טלפון לא תקין. אנא כלול את קוד המדינה (לדוגמה, +972).",
                 locationNotAvailable: "המיקום אינו זמין עבור קוד מדינה זה.",
-                markerPopup: "מיקום עבור {phone}: {country}",
+                markerPopupTitle: (name, phone) => name || phone,
+                removePosition: "הסר מיקום",
                 mainMarkerPopup: (hasLocation) => hasLocation ? "המיקום הנוכחי שלך!<br> ניתן להתקרב ולהזיז את המפה." : "מיקום ברירת מחדל (לונדון)<br> ניתן להתקרב ולהזיז את המפה.",
-                mapAttribution: 'נתוני מפה © <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
-                confirmMinimize: "האם אתה בטוח שברצונך למזער את היישום?",
-                countdownMessage: (count) => `היישום ייסגר בעוד ${count}`,
-                minimizeMessage: "אנא מזער את היישום על ידי לחיצה על כפתור הבית",
+                mapAttribution: {
+                    roadmap: 'נתוני מפה © <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
+                    satellite: '© Esri, Maxar, Earthstar Geographics, וקהילת משתמשי GIS',
+                    hybrid: '© Esri, Maxar, Earthstar Geographics, וקהילת משתמשי GIS'
+                },
+                thankYouMessage: "תודה שהשתמשת במפת רצים חיה",
                 locationErrorDefault: "לא ניתן לאחזר את המיקום. משתמש במיקום ברירת מחדל (לונדון).",
                 locationErrorPermission: "הרשאת המיקום נדחתה. אנא אפשר גישה למיקום בהגדרות הדפדפן ורענן את הדף.",
                 locationErrorUnavailable: "מידע המיקום אינו זמין. אנא ודא ששירותי המיקום מופעלים במכשיר שלך.",
@@ -290,11 +287,10 @@
             if (storedLocations) {
                 customMarkers = JSON.parse(storedLocations).map(loc => {
                     const marker = L.marker([loc.lat, loc.lng]).addTo(map);
-                    const t = getCurrentTranslations();
-                    const popupText = t.markerPopup
-                        .replace('{phone}', loc.phone)
-                        .replace('{country}', loc.country);
-                    marker.bindPopup(popupText);
+                    marker.phone = loc.phone;
+                    marker.country = loc.country;
+                    marker.customName = loc.customName;
+                    updateMarkerPopup(marker);
                     return marker;
                 });
             }
@@ -306,17 +302,31 @@
                 lat: marker.getLatLng().lat,
                 lng: marker.getLatLng().lng,
                 phone: marker.phone,
-                country: marker.country
+                country: marker.country,
+                customName: marker.customName
             }));
             localStorage.setItem('customLocations', JSON.stringify(locations));
         }
 
-        // Function to add a new location based on phone number
-        function addNewLocation() {
+        // Function to update a marker's popup
+        function updateMarkerPopup(marker) {
+            const t = getCurrentTranslations();
+            const title = t.markerPopupTitle(marker.customName, marker.phone);
+            const popupContent = `
+                <div class="custom-marker-popup">
+                    <h3>${title}</h3>
+                    <button onclick="removePosition('${marker.phone}')">${t.removePosition}</button>
+                </div>
+            `;
+            marker.bindPopup(popupContent);
+        }
+
+        // Function to add a new position
+        function addPosition() {
             if (!isAppRunning) return;
 
             const t = getCurrentTranslations();
-            const phone = prompt(t.addLocationPrompt);
+            const phone = prompt(t.addPositionPhonePrompt);
             if (!phone) return; // User canceled or entered nothing
 
             // Extract country code (e.g., "+972")
@@ -333,26 +343,88 @@
                 return;
             }
 
+            // Prompt for optional name
+            const name = prompt(t.addPositionNamePrompt);
+            const customName = name && name.trim() ? name.trim() : null;
+
             // Add marker at the simulated location
             const newMarker = L.marker([locationData.lat, locationData.lng]).addTo(map);
-            const popupText = t.markerPopup
-                .replace('{phone}', phone)
-                .replace('{country}', locationData.name);
-            newMarker.bindPopup(popupText);
-            newMarker.phone = phone; // Store phone number in marker for saving
-            newMarker.country = locationData.name; // Store country name for saving
+            newMarker.phone = phone;
+            newMarker.country = locationData.name;
+            newMarker.customName = customName;
+            updateMarkerPopup(newMarker);
             customMarkers.push(newMarker);
             saveCustomLocations();
+            togglePopupMenu(); // Close the popup menu
         }
 
-        // Function to forget all custom locations
-        function forgetLocations() {
+        // Function to remove a specific position
+        window.removePosition = function(phone) {
+            const markerIndex = customMarkers.findIndex(m => m.phone === phone);
+            if (markerIndex !== -1) {
+                const marker = customMarkers[markerIndex];
+                marker.remove(); // Remove from map
+                customMarkers.splice(markerIndex, 1); // Remove from array
+                saveCustomLocations(); // Update localStorage
+            }
+        };
+
+        // Function to remove all positions (except current user location)
+        function removeAllPositions() {
             if (!isAppRunning) return;
 
-            // Remove all custom markers from the map
             customMarkers.forEach(marker => marker.remove());
             customMarkers = [];
             localStorage.removeItem('customLocations');
+            togglePopupMenu(); // Close the popup menu
+        }
+
+        // Function to toggle the popup menu
+        function togglePopupMenu() {
+            const popupMenu = document.getElementById('popup-menu');
+            const isOpen = popupMenu.classList.toggle('open');
+            // Close map mode options if popup is closed
+            if (!isOpen) {
+                document.getElementById('map-mode-options').classList.remove('open');
+            }
+        }
+
+        // Function to toggle map mode options
+        function toggleMapModeOptions() {
+            document.getElementById('map-mode-options').classList.toggle('open');
+        }
+
+        // Function to change map mode
+        function changeMapMode(mode) {
+            if (!isAppRunning) return;
+
+            currentMapMode = mode;
+            updateMapLanguage();
+            togglePopupMenu(); // Close the popup menu
+        }
+
+        // Function to shutdown the application
+        function shutdown() {
+            if (!isAppRunning) return;
+
+            isAppRunning = false;
+
+            // Remove map, marker, and custom markers
+            if (marker) marker.remove();
+            customMarkers.forEach(m => m.remove());
+            map.remove();
+            localStorage.removeItem('customLocations');
+            customMarkers = [];
+
+            // Clear the entire page content
+            document.body.innerHTML = '';
+
+            // Display thank you message
+            const t = getCurrentTranslations();
+            const messageDiv = document.createElement('div');
+            messageDiv.className = 'thank-you-message';
+            messageDiv.textContent = t.thankYouMessage;
+            document.body.appendChild(messageDiv);
         }
 
         // Function to set the language and update UI
@@ -380,12 +452,17 @@
             document.getElementById('page-title').textContent = t.pageTitle;
             document.getElementById('page-heading').textContent = t.pageTitle;
 
-            // Update menu text
-            document.getElementById('menu-title').textContent = t.menuTitle;
-            document.getElementById('minimize-app-btn').textContent = t.minimizeApp;
-            document.getElementById('refresh-map-btn').textContent = t.refreshMap;
-            document.getElementById('add-location-btn').textContent = t.addLocation;
-            document.getElementById('forget-locations-btn').textContent = t.forgetLocations;
+            // Update menu button
+            document.getElementById('menu-btn').textContent = t.menuButton;
+
+            // Update popup menu items
+            document.getElementById('add-position').textContent = t.addPosition;
+            document.getElementById('remove-all-positions').textContent = t.removeAllPositions;
+            document.getElementById('map-mode').textContent = t.mapMode;
+            document.querySelector('label[for="roadmap"]').textContent = ` ${t.mapModeRoadmap}`;
+            document.querySelector('label[for="satellite"]').textContent = ` ${t.mapModeSatellite}`;
+            document.querySelector('label[for="hybrid"]').textContent = ` ${t.mapModeHybrid}`;
+            document.getElementById('shutdown').textContent = t.shutdown;
         }
 
         // Function to update map language and marker
@@ -405,11 +482,31 @@
                 if (layer instanceof L.TileLayer) map.removeLayer(layer);
             });
 
-            // Add OpenStreetMap tiles with language-specific attribution
-            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-                attribution: t.mapAttribution,
-                maxZoom: 19,
-            }).addTo(map);
+            // Add tile layer based on map mode
+            let tileLayer;
+            if (currentMapMode === 'roadmap') {
+                tileLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                    attribution: t.mapAttribution.roadmap,
+                    maxZoom: 19,
+                });
+            } else if (currentMapMode === 'satellite') {
+                tileLayer = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+                    attribution: t.mapAttribution.satellite,
+                    maxZoom: 19,
+                });
+            } else if (currentMapMode === 'hybrid') {
+                tileLayer = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+                    attribution: t.mapAttribution.hybrid,
+                    maxZoom: 19,
+                });
+                // Add a secondary layer for labels (hybrid mode)
+                L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                    attribution: '',
+                    maxZoom: 19,
+                    opacity: 0.4
+                }).addTo(map);
+            }
+            tileLayer.addTo(map);
 
             // Customize popup based on language
             const hasLocation = window.currentLocation != null;
@@ -422,65 +519,7 @@
                 .openPopup();
 
             // Update custom markers' popups
-            customMarkers.forEach(m => {
-                const popupText = t.markerPopup
-                    .replace('{phone}', m.phone)
-                    .replace('{country}', m.country);
-                m.setPopupContent(popupText);
-            });
-        }
-
-        // Function to shut down (minimize) the application with countdown
-        function shutdownApp() {
-            const t = getCurrentTranslations();
-
-            // Prompt for confirmation
-            const userConfirmed = confirm(t.confirmMinimize);
-            if (!userConfirmed) return; // Do nothing if user cancels
-
-            isAppRunning = false;
-
-            // Remove map, marker, and custom markers
-            if (marker) marker.remove();
-            customMarkers.forEach(m => m.remove());
-            map.remove();
-            const mapContainer = document.getElementById('map-container');
-            mapContainer.innerHTML = '';
-
-            // Clear custom locations from localStorage
-            localStorage.removeItem('customLocations');
-            customMarkers = [];
-
-            // Create toast bar for countdown
-            const toast = document.createElement('div');
-            toast.className = 'toast-bar';
-            mapContainer.appendChild(toast);
-
-            // Start countdown
-            let countdown = 3;
-            toast.textContent = t.countdownMessage(countdown);
-
-            const countdownInterval = setInterval(() => {
-                countdown--;
-                if (countdown > 0) {
-                    toast.textContent = t.countdownMessage(countdown);
-                } else {
-                    clearInterval(countdownInterval);
-                    // Remove toast bar
-                    toast.remove();
-                    // Display minimize message
-                    const messageDiv = document.createElement('div');
-                    messageDiv.className = 'minimize-message';
-                    messageDiv.textContent = t.minimizeMessage;
-                    mapContainer.appendChild(messageDiv);
-                }
-            }, 1000); // Update every 1 second
-        }
-
-        // Function to refresh the page
-        function refreshPage() {
-            localStorage.setItem('hasRefreshed', 'true');
-            location.reload();
+            customMarkers.forEach(marker => updateMarkerPopup(marker));
         }
 
         // Function to get current location
@@ -537,6 +576,9 @@
                 updateMapLanguage();
             }
         }
+
+        // Add event listener for the menu button
+        document.getElementById('menu-btn').addEventListener('click', togglePopupMenu);
 
         // Set default to device language and initialize UI
         setLanguage('device'); // Default to device language
