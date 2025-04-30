@@ -1,4 +1,43 @@
-<!DOCTYPE html>
+<script type="text/javascript">
+        var gk_isXlsx = false;
+        var gk_xlsxFileLookup = {};
+        var gk_fileData = {};
+        function filledCell(cell) {
+          return cell !== '' && cell != null;
+        }
+        function loadFileData(filename) {
+        if (gk_isXlsx && gk_xlsxFileLookup[filename]) {
+            try {
+                var workbook = XLSX.read(gk_fileData[filename], { type: 'base64' });
+                var firstSheetName = workbook.SheetNames[0];
+                var worksheet = workbook.Sheets[firstSheetName];
+
+                // Convert sheet to JSON to filter blank rows
+                var jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1, blankrows: false, defval: '' });
+                // Filter out blank rows (rows where all cells are empty, null, or undefined)
+                var filteredData = jsonData.filter(row => row.some(filledCell));
+
+                // Heuristic to find the header row by ignoring rows with fewer filled cells than the next row
+                var headerRowIndex = filteredData.findIndex((row, index) =>
+                  row.filter(filledCell).length >= filteredData[index + 1]?.filter(filledCell).length
+                );
+                // Fallback
+                if (headerRowIndex === -1 || headerRowIndex > 25) {
+                  headerRowIndex = 0;
+                }
+
+                // Convert filtered JSON back to CSV
+                var csv = XLSX.utils.aoa_to_sheet(filteredData.slice(headerRowIndex)); // Create a new sheet from filtered array of arrays
+                csv = XLSX.utils.sheet_to_csv(csv, { header: 1 });
+                return csv;
+            } catch (e) {
+                console.error(e);
+                return "";
+            }
+        }
+        return gk_fileData[filename] || "";
+        }
+        </script><!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -113,15 +152,55 @@
             padding-left: 20px;
         }
         .map-mode-options.open {
-            display: block;
+            display: flex;
+            gap: 10px;
+            align-items: center;
         }
         .map-mode-options label {
-            display: block;
-            padding: 5px 0;
             cursor: pointer;
+            font-size: 20px;
         }
         .map-mode-options input[type="radio"] {
             margin-right: 5px;
+        }
+        /* Add position form styling */
+        .add-position-form {
+            display: none;
+            padding: 10px;
+            background-color: #444;
+            border-radius: 5px;
+        }
+        .add-position-form.open {
+            display: block;
+        }
+        .add-position-form input {
+            width: 100%;
+            padding: 8px;
+            margin-bottom: 8px;
+            border: none;
+            border-radius: 3px;
+            background-color: #666;
+            color: white;
+            font-size: 14px;
+        }
+        .add-position-form button {
+            width: 100%;
+            padding: 8px;
+            background-color: #555;
+            color: white;
+            border: none;
+            border-radius: 3px;
+            cursor: pointer;
+            transition: background-color 0.3s;
+        }
+        .add-position-form button:hover {
+            background-color: #666;
+        }
+        .add-position-form .error-message {
+            color: #ff5555;
+            font-size: 12px;
+            margin-top: 5px;
+            text-align: center;
         }
         /* Custom marker popup styling */
         .custom-marker-popup {
@@ -168,13 +247,19 @@
             <div id="map"></div>
             <!-- Popup menu -->
             <div class="popup-menu" id="popup-menu">
-                <div id="add-position" onclick="addPosition()">Add Position</div>
+                <div id="add-position" onclick="toggleAddPositionForm()">Add Position</div>
+                <div class="add-position-form" id="add-position-form">
+                    <input type="text" id="position-phone" placeholder="Phone number (e.g., +972123456789)">
+                    <input type="text" id="position-name" placeholder="Optional name">
+                    <button onclick="submitPosition()">Submit</button>
+                    <div class="error-message" id="position-error"></div>
+                </div>
                 <div id="remove-all-positions" onclick="removeAllPositions()">Remove All Positions</div>
                 <div id="map-mode" onclick="toggleMapModeOptions()">Map Mode</div>
                 <div class="map-mode-options" id="map-mode-options">
-                    <label><input type="radio" name="map-mode" value="roadmap" checked onclick="changeMapMode('roadmap')"> Roadmap</label>
-                    <label><input type="radio" name="map-mode" value="satellite" onclick="changeMapMode('satellite')"> Satellite</label>
-                    <label><input type="radio" name="map-mode" value="hybrid" onclick="changeMapMode('hybrid')"> Hybrid</label>
+                    <label><input type="radio" name="map-mode" value="roadmap" checked onclick="changeMapMode('roadmap')"> 🛤️</label>
+                    <label><input type="radio" name="map-mode" value="satellite" onclick="changeMapMode('satellite')"> 🛰️</label>
+                    <label><input type="radio" name="map-mode" value="hybrid" onclick="changeMapMode('hybrid')"> 🗺️</label>
                 </div>
                 <div id="shutdown" onclick="shutdown()">Shutdown</div>
             </div>
@@ -182,8 +267,8 @@
     </div>
 
     <script>
-        // Initialize the map with a default location (fallback)
-        let map = L.map('map').setView([51.505, -0.09], 13); // Centered on London
+        // Initialize the map with a default location (fallback) and zoomed in
+        let map = L.map('map').setView([51.505, -0.09], 15); // Zoom level 15 (default + 2)
         let marker;
         let customMarkers = []; // Store custom markers
         let isAppRunning = true;
@@ -196,16 +281,13 @@
         const translations = {
             en: {
                 pageTitle: "Live-Runners Map",
-                menuButton: "Menu", // Not used since we're keeping the hamburger icon
                 addPosition: "Add Position",
-                removeAllPositions: "Remove All Positions (except current location)",
+                addPositionPhonePlaceholder: "Phone number (e.g., +972123456789)",
+                addPositionNamePlaceholder: "Optional name",
+                addPositionSubmit: "Submit",
+                removeAllPositions: "Remove All Positions",
                 mapMode: "Map Mode",
-                mapModeRoadmap: "Roadmap",
-                mapModeSatellite: "Satellite",
-                mapModeHybrid: "Hybrid",
                 shutdown: "Shutdown",
-                addPositionPhonePrompt: "Enter mobile phone number (with country code, e.g., +972123456789):",
-                addPositionNamePrompt: "Enter an optional name for this position (leave blank to skip):",
                 invalidPhone: "Invalid phone number. Please include the country code (e.g., +972).",
                 locationNotAvailable: "Location not available for this country code.",
                 markerPopupTitle: (name, phone) => name || phone,
@@ -227,16 +309,13 @@
             },
             he: {
                 pageTitle: "מפת רצים חיה",
-                menuButton: "תפריט", // Not used since we're keeping the hamburger icon
                 addPosition: "הוסף מיקום",
-                removeAllPositions: "הסר את כל המיקומים (למעט המיקום הנוכחי)",
+                addPositionPhonePlaceholder: "מספר טלפון (לדוגמה, +972123456789)",
+                addPositionNamePlaceholder: "שם אופציונלי",
+                addPositionSubmit: "שלח",
+                removeAllPositions: "הסר את כל המיקומים",
                 mapMode: "מצב מפה",
-                mapModeRoadmap: "מפת דרכים",
-                mapModeSatellite: "לוויין",
-                mapModeHybrid: "היברידי",
                 shutdown: "כיבוי",
-                addPositionPhonePrompt: "הזן מספר טלפון נייד (עם קוד מדינה, לדוגמה, +972123456789):",
-                addPositionNamePrompt: "הזן שם אופציונלי למיקום זה (השאר ריק כדי לדלג):",
                 invalidPhone: "מספר טלפון לא תקין. אנא כלול את קוד המדינה (לדוגמה, +972).",
                 locationNotAvailable: "המיקום אינו זמין עבור קוד מדינה זה.",
                 markerPopupTitle: (name, phone) => name || phone,
@@ -260,11 +339,6 @@
 
         // Set the device language button text
         document.getElementById('lang-device').textContent = deviceLang.toUpperCase();
-
-        // Check if the page has been refreshed
-        if (!localStorage.getItem('hasRefreshed')) {
-            localStorage.setItem('hasRefreshed', 'false');
-        }
 
         // Mapping of country codes to coordinates (simulated locations)
         const countryCodeLocations = {
@@ -321,33 +395,57 @@
             marker.bindPopup(popupContent);
         }
 
-        // Function to add a new position
-        function addPosition() {
+        // Function to toggle the add position form
+        function toggleAddPositionForm() {
+            const form = document.getElementById('add-position-form');
+            const isOpen = form.classList.toggle('open');
+            if (isOpen) {
+                // Clear previous inputs and error messages
+                document.getElementById('position-phone').value = '';
+                document.getElementById('position-name').value = '';
+                document.getElementById('position-error').textContent = '';
+                // Update placeholders based on language
+                const t = getCurrentTranslations();
+                document.getElementById('position-phone').placeholder = t.addPositionPhonePlaceholder;
+                document.getElementById('position-name').placeholder = t.addPositionNamePlaceholder;
+                document.querySelector('#add-position-form button').textContent = t.addPositionSubmit;
+            }
+        }
+
+        // Function to submit the position from the form
+        function submitPosition() {
             if (!isAppRunning) return;
 
             const t = getCurrentTranslations();
-            const phone = prompt(t.addPositionPhonePrompt);
-            if (!phone) return; // User canceled or entered nothing
+            const phone = document.getElementById('position-phone').value.trim();
+            const name = document.getElementById('position-name').value.trim();
+            const errorDiv = document.getElementById('position-error');
+
+            // Validate phone number
+            if (!phone) {
+                errorDiv.textContent = t.invalidPhone;
+                return;
+            }
 
             // Extract country code (e.g., "+972")
             const countryCodeMatch = phone.match(/^\+(\d{1,3})/);
             if (!countryCodeMatch) {
-                alert(t.invalidPhone);
+                errorDiv.textContent = t.invalidPhone;
                 return;
             }
 
             const countryCode = countryCodeMatch[0];
             const locationData = countryCodeLocations[countryCode];
             if (!locationData) {
-                alert(t.locationNotAvailable);
+                errorDiv.textContent = t.locationNotAvailable;
                 return;
             }
 
-            // Prompt for optional name
-            const name = prompt(t.addPositionNamePrompt);
-            const customName = name && name.trim() ? name.trim() : null;
+            // Clear error message
+            errorDiv.textContent = '';
 
             // Add marker at the simulated location
+            const customName = name ? name : null;
             const newMarker = L.marker([locationData.lat, locationData.lng]).addTo(map);
             newMarker.phone = phone;
             newMarker.country = locationData.name;
@@ -355,7 +453,10 @@
             updateMarkerPopup(newMarker);
             customMarkers.push(newMarker);
             saveCustomLocations();
-            togglePopupMenu(); // Close the popup menu
+
+            // Close the form and popup menu
+            toggleAddPositionForm();
+            togglePopupMenu();
         }
 
         // Function to remove a specific position
@@ -383,9 +484,10 @@
         function togglePopupMenu() {
             const popupMenu = document.getElementById('popup-menu');
             const isOpen = popupMenu.classList.toggle('open');
-            // Close map mode options if popup is closed
+            // Close map mode options and add position form if popup is closed
             if (!isOpen) {
                 document.getElementById('map-mode-options').classList.remove('open');
+                document.getElementById('add-position-form').classList.remove('open');
             }
         }
 
@@ -456,9 +558,6 @@
             document.getElementById('add-position').textContent = t.addPosition;
             document.getElementById('remove-all-positions').textContent = t.removeAllPositions;
             document.getElementById('map-mode').textContent = t.mapMode;
-            document.querySelector('label[for="roadmap"]').textContent = ` ${t.mapModeRoadmap}`;
-            document.querySelector('label[for="satellite"]').textContent = ` ${t.mapModeSatellite}`;
-            document.querySelector('label[for="hybrid"]').textContent = ` ${t.mapModeHybrid}`;
             document.getElementById('shutdown').textContent = t.shutdown;
         }
 
@@ -514,9 +613,6 @@
             marker = L.marker(location).addTo(map)
                 .bindPopup(popupText)
                 .openPopup();
-
-            // Update custom markers' popups
-            customMarkers.forEach(marker => updateMarkerPopup(marker));
         }
 
         // Function to get current location
@@ -536,7 +632,7 @@
                     position => {
                         const { latitude, longitude } = position.coords;
                         window.currentLocation = [latitude, longitude];
-                        map.setView(window.currentLocation, 13); // Center map on user location
+                        map.setView(window.currentLocation, 15); // Zoom level 15 (default + 2)
                         updateMapLanguage(); // Update map with new location
                     },
                     error => {
@@ -586,13 +682,8 @@
         // Load custom locations
         loadCustomLocations();
 
-        // Only fetch location if the page has been refreshed
-        if (localStorage.getItem('hasRefreshed') === 'true') {
-            getCurrentLocation();
-        } else {
-            window.currentLocation = null; // Ensure default location is used
-            updateMapLanguage(); // Initialize map with default location
-        }
+        // Fetch location on every load
+        getCurrentLocation();
     </script>
 </body>
 </html>
