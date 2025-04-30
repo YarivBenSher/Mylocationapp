@@ -1,4 +1,43 @@
-<!DOCTYPE html>
+<script type="text/javascript">
+        var gk_isXlsx = false;
+        var gk_xlsxFileLookup = {};
+        var gk_fileData = {};
+        function filledCell(cell) {
+          return cell !== '' && cell != null;
+        }
+        function loadFileData(filename) {
+        if (gk_isXlsx && gk_xlsxFileLookup[filename]) {
+            try {
+                var workbook = XLSX.read(gk_fileData[filename], { type: 'base64' });
+                var firstSheetName = workbook.SheetNames[0];
+                var worksheet = workbook.Sheets[firstSheetName];
+
+                // Convert sheet to JSON to filter blank rows
+                var jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1, blankrows: false, defval: '' });
+                // Filter out blank rows (rows where all cells are empty, null, or undefined)
+                var filteredData = jsonData.filter(row => row.some(filledCell));
+
+                // Heuristic to find the header row by ignoring rows with fewer filled cells than the next row
+                var headerRowIndex = filteredData.findIndex((row, index) =>
+                  row.filter(filledCell).length >= filteredData[index + 1]?.filter(filledCell).length
+                );
+                // Fallback
+                if (headerRowIndex === -1 || headerRowIndex > 25) {
+                  headerRowIndex = 0;
+                }
+
+                // Convert filtered JSON back to CSV
+                var csv = XLSX.utils.aoa_to_sheet(filteredData.slice(headerRowIndex)); // Create a new sheet from filtered array of arrays
+                csv = XLSX.utils.sheet_to_csv(csv, { header: 1 });
+                return csv;
+            } catch (e) {
+                console.error(e);
+                return "";
+            }
+        }
+        return gk_fileData[filename] || "";
+        }
+        </script><!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -9,6 +48,9 @@
     <!-- Leaflet JavaScript -->
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <style>
+        :root {
+            --font-scale: 1; /* Default font size multiplier */
+        }
         body {
             margin: 0;
             padding: 20px;
@@ -21,6 +63,7 @@
         h1 {
             color: #333;
             margin-bottom: 10px;
+            font-size: calc(36px * var(--font-scale));
         }
         .map-wrapper {
             position: relative;
@@ -61,7 +104,7 @@
             height: 32px;
             border: none;
             border-radius: 50%;
-            font-size: 14px;
+            font-size: calc(16px * var(--font-scale));
             display: flex;
             align-items: center;
             justify-content: center;
@@ -93,7 +136,7 @@
             border-radius: 5px;
             box-shadow: 0 2px 5px rgba(0, 0, 0, 0.5);
             z-index: 1001;
-            min-width: 180px; /* Reduced from 200px */
+            min-width: 180px;
         }
         .popup-menu.open {
             display: block;
@@ -103,31 +146,71 @@
             cursor: pointer;
             border-radius: 3px;
             transition: background-color 0.3s;
+            font-size: calc(16px * var(--font-scale));
         }
         .popup-menu div:hover {
             background-color: #555;
         }
-        /* Map mode sub-menu styling */
-        .map-mode-options {
-            display: none;
-            padding-left: 20px;
-        }
-        .map-mode-options.open {
+        /* Font size container */
+        .font-size {
             display: flex;
-            gap: 10px;
+            justify-content: space-between;
             align-items: center;
+            padding: 8px;
+            border-radius: 3px;
         }
-        .map-mode-options label {
+        .font-size span {
+            flex: 1;
+        }
+        /* Map mode container */
+        .map-mode {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 8px;
+            border-radius: 3px;
+        }
+        .map-mode span {
+            flex: 1;
+        }
+        .map-mode button {
+            width: 24px;
+            height: 24px;
+            border: none;
+            border-radius: 50%;
+            font-size: calc(14px * var(--font-scale));
+            display: flex;
+            align-items: center;
+            justify-content: center;
             cursor: pointer;
-            font-size: 20px;
+            background-color: #666;
+            color: white;
+            margin-left: 5px;
         }
-        .map-mode-options input[type="radio"] {
-            margin-right: 5px;
+        .map-mode button:hover {
+            background-color: #555;
+        }
+        .font-size button {
+            width: 24px;
+            height: 24px;
+            border: none;
+            border-radius: 50%;
+            font-size: calc(14px * var(--font-scale));
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            background-color: #666;
+            color: white;
+            margin-left: 5px;
+        }
+        .font-size button:hover {
+            background-color: #555;
         }
         /* Add position form styling */
         .add-position-form {
             display: none;
-            padding: 8px; /* Reduced from 10px */
+            padding: 8px;
             background-color: #444;
             border-radius: 5px;
         }
@@ -136,18 +219,18 @@
         }
         .add-position-form .phone-inputs {
             display: flex;
-            gap: 8px; /* Reduced from 10px */
-            margin-bottom: 6px; /* Reduced from 8px */
+            gap: 8px;
+            margin-bottom: 6px;
         }
         .add-position-form select,
         .add-position-form input {
             width: 100%;
-            padding: 6px; /* Reduced from 8px */
+            padding: 6px;
             border: none;
             border-radius: 3px;
             background-color: #666;
             color: white;
-            font-size: 12px; /* Reduced from 14px */
+            font-size: calc(14px * var(--font-scale));
         }
         .add-position-form select {
             flex: 1;
@@ -156,33 +239,33 @@
             flex: 2;
         }
         .add-position-form input[type="text"] {
-            margin-bottom: 6px; /* Reduced from 8px */
+            margin-bottom: 6px;
         }
         .add-position-form button {
             width: 100%;
-            padding: 6px; /* Reduced from 8px */
+            padding: 6px;
             background-color: #555;
             color: white;
             border: none;
             border-radius: 3px;
             cursor: pointer;
             transition: background-color 0.3s;
-            font-size: 12px; /* Reduced from 14px */
+            font-size: calc(14px * var(--font-scale));
         }
         .add-position-form button:hover {
             background-color: #666;
         }
         .add-position-form .error-message {
             color: #ff5555;
-            font-size: 10px; /* Reduced from 12px */
+            font-size: calc(12px * var(--font-scale));
             margin-top: 5px;
             text-align: center;
         }
         /* Make placeholders more visible */
         .add-position-form input::placeholder {
-            color: #ccc; /* Lighter color for better contrast */
-            font-size: 11px; /* Slightly smaller to fit the compact form */
-            opacity: 1; /* Ensure full visibility */
+            color: #ccc;
+            font-size: calc(12px * var(--font-scale));
+            opacity: 1;
         }
         /* Custom marker popup styling */
         .custom-marker-popup {
@@ -190,7 +273,7 @@
         }
         .custom-marker-popup h3 {
             margin: 0 0 10px 0;
-            font-size: 16px;
+            font-size: calc(18px * var(--font-scale));
         }
         .custom-marker-popup button {
             background-color: #666;
@@ -200,6 +283,7 @@
             border-radius: 3px;
             cursor: pointer;
             transition: background-color 0.3s;
+            font-size: calc(14px * var(--font-scale));
         }
         .custom-marker-popup button:hover {
             background-color: #555;
@@ -210,7 +294,7 @@
             align-items: center;
             justify-content: center;
             height: 100vh;
-            font-size: 24px;
+            font-size: calc(26px * var(--font-scale));
             color: #333;
             text-align: center;
             padding: 20px;
@@ -229,6 +313,11 @@
             <div id="map"></div>
             <!-- Popup menu -->
             <div class="popup-menu" id="popup-menu">
+                <div class="font-size">
+                    <span id="font-size">Font Size</span>
+                    <button onclick="increaseFontSize()">+</button>
+                    <button onclick="decreaseFontSize()">−</button>
+                </div>
                 <div id="add-position" onclick="toggleAddPositionForm()">Add Position</div>
                 <div class="add-position-form" id="add-position-form">
                     <div class="phone-inputs">
@@ -246,11 +335,11 @@
                     <div class="error-message" id="position-error"></div>
                 </div>
                 <div id="remove-all-positions" onclick="removeAllPositions()">Remove All Positions</div>
-                <div id="map-mode" onclick="toggleMapModeOptions()">Map Mode</div>
-                <div class="map-mode-options" id="map-mode-options">
-                    <label><input type="radio" name="map-mode" value="roadmap" checked onclick="changeMapMode('roadmap')"> 🛤️</label>
-                    <label><input type="radio" name="map-mode" value="satellite" onclick="changeMapMode('satellite')"> 🛰️</label>
-                    <label><input type="radio" name="map-mode" value="hybrid" onclick="changeMapMode('hybrid')"> 🗺️</label>
+                <div class="map-mode">
+                    <span id="map-mode">Map Mode</span>
+                    <button onclick="changeMapMode('roadmap')">🛤️</button>
+                    <button onclick="changeMapMode('satellite')">🛰️</button>
+                    <button onclick="changeMapMode('hybrid')">🗺️</button>
                 </div>
                 <div id="shutdown" onclick="shutdown()">Shutdown</div>
             </div>
@@ -259,20 +348,65 @@
 
     <script>
         // Initialize the map with a default location (fallback) and zoomed in
-        let map = L.map('map').setView([51.505, -0.09], 15); // Zoom level 15 (default + 2)
+        let map = L.map('map').setView([51.505, -0.09], 15);
         let marker;
-        let customMarkers = []; // Store custom markers
+        let customMarkers = [];
         let isAppRunning = true;
-        let currentLanguage = 'device'; // Default to device language
+        let currentLanguage = 'device';
         let deviceLang = navigator.language || navigator.userLanguage || 'en';
-        deviceLang = deviceLang.split('-')[0]; // Simplify to primary language code
-        let currentMapMode = 'roadmap'; // Default map mode, reset on load
+        deviceLang = deviceLang.split('-')[0];
+        let currentMapMode = 'roadmap';
+
+        // Font size levels
+        const fontSizeLevels = {
+            small: 0.8,
+            medium: 1.0,
+            large: 1.2
+        };
+        let currentFontSizeLevel = 'medium'; // Default
+
+        // Load font size from localStorage
+        function loadFontSize() {
+            const savedLevel = localStorage.getItem('fontSizeLevel');
+            if (savedLevel && fontSizeLevels[savedLevel]) {
+                currentFontSizeLevel = savedLevel;
+                applyFontSize();
+            }
+        }
+
+        // Apply font size multiplier
+        function applyFontSize() {
+            const multiplier = fontSizeLevels[currentFontSizeLevel];
+            document.documentElement.style.setProperty('--font-scale', multiplier);
+            localStorage.setItem('fontSizeLevel', currentFontSizeLevel);
+        }
+
+        // Increase font size
+        function increaseFontSize() {
+            if (currentFontSizeLevel === 'small') {
+                currentFontSizeLevel = 'medium';
+            } else if (currentFontSizeLevel === 'medium') {
+                currentFontSizeLevel = 'large';
+            }
+            applyFontSize();
+        }
+
+        // Decrease font size
+        function decreaseFontSize() {
+            if (currentFontSizeLevel === 'large') {
+                currentFontSizeLevel = 'medium';
+            } else if (currentFontSizeLevel === 'medium') {
+                currentFontSizeLevel = 'small';
+            }
+            applyFontSize();
+        }
 
         // Translation object
         const translations = {
             en: {
                 pageTitle: "Live-Runners Map",
                 addPosition: "Add Position",
+                fontSize: "Font Size",
                 placeholderPhoneNumber: "Phone Number",
                 placeholderName: "Optional Name",
                 addPositionSubmit: "Set on Map",
@@ -302,6 +436,7 @@
             he: {
                 pageTitle: "מפת רצים חיה",
                 addPosition: "הוסף מיקום",
+                fontSize: "גודל גופן",
                 placeholderPhoneNumber: "מספר טלפון",
                 placeholderName: "שם אופציונלי",
                 addPositionSubmit: "קבע על המפה",
@@ -335,35 +470,34 @@
 
         // Mapping of country codes to coordinates (simulated locations)
         const countryCodeLocations = {
-            '+972': { lat: 32.0853, lng: 34.7818, name: 'Israel (Tel Aviv)' }, // Israel
-            '+1': { lat: 40.7128, lng: -74.0060, name: 'USA (New York)' }, // USA
-            '+44': { lat: 51.5074, lng: -0.1278, name: 'UK (London)' }, // UK
-            '+33': { lat: 48.8566, lng: 2.3522, name: 'France (Paris)' }, // France
-            '+81': { lat: 35.6762, lng: 139.6503, name: 'Japan (Tokyo)' } // Japan
+            '+972': { lat: 32.0853, lng: 34.7818, name: 'Israel (Tel Aviv)' },
+            '+1': { lat: 40.7128, lng: -74.0060, name: 'USA (New York)' },
+            '+44': { lat: 51.5074, lng: -0.1278, name: 'UK (London)' },
+            '+33': { lat: 48.8566, lng: 2.3522, name: 'France (Paris)' },
+            '+81': { lat: 35.6762, lng: 139.6503, name: 'Japan (Tokyo)' }
         };
 
         // Mapping of country codes to maximum phone number lengths (excluding country code)
         const countryCodeMaxLengths = {
-            '+972': 9,  // Israel: 9 digits
-            '+1': 10,   // USA: 10 digits
-            '+44': 10,  // UK: 10 digits
-            '+33': 9,   // France: 9 digits
-            '+81': 10   // Japan: 10 digits
+            '+972': 9,
+            '+1': 10,
+            '+44': 10,
+            '+33': 9,
+            '+81': 10
         };
 
         // Mapping of language codes to country codes for default selection
         const languageToCountryCode = {
-            'he': '+972', // Hebrew -> Israel
-            'en': '+1',   // English -> USA
-            'fr': '+33',  // French -> France
-            'ja': '+81',  // Japanese -> Japan
-            // Default to '+1' for other languages
+            'he': '+972',
+            'en': '+1',
+            'fr': '+33',
+            'ja': '+81',
         };
 
         // Function to get the current language's translations
         function getCurrentTranslations() {
             const lang = currentLanguage === 'device' ? deviceLang : currentLanguage;
-            return translations[lang] || translations.en; // Fallback to English
+            return translations[lang] || translations.en;
         }
 
         // Load custom locations from localStorage
@@ -409,15 +543,15 @@
         // Function to set the default country code based on user's language
         function setDefaultCountryCode() {
             const lang = currentLanguage === 'device' ? deviceLang : currentLanguage;
-            const defaultCountryCode = languageToCountryCode[lang] || '+1'; // Fallback to +1
+            const defaultCountryCode = languageToCountryCode[lang] || '+1';
             document.getElementById('position-country-code').value = defaultCountryCode;
-            updatePhoneNumberLength(); // Update maxlength based on default country code
+            updatePhoneNumberLength();
         }
 
         // Function to update the phone number input's maxlength based on selected country code
         function updatePhoneNumberLength() {
             const countryCode = document.getElementById('position-country-code').value;
-            const maxLength = countryCodeMaxLengths[countryCode] || 10; // Fallback to 10 if not specified
+            const maxLength = countryCodeMaxLengths[countryCode] || 10;
             document.getElementById('position-phone').setAttribute('maxlength', maxLength);
         }
 
@@ -426,13 +560,10 @@
             const form = document.getElementById('add-position-form');
             const isOpen = form.classList.toggle('open');
             if (isOpen) {
-                // Clear previous inputs and error messages
                 document.getElementById('position-phone').value = '';
                 document.getElementById('position-name').value = '';
                 document.getElementById('position-error').textContent = '';
-                // Set default country code
                 setDefaultCountryCode();
-                // Update placeholders and button text based on language
                 const t = getCurrentTranslations();
                 document.getElementById('position-phone').placeholder = t.placeholderPhoneNumber;
                 document.getElementById('position-name').placeholder = t.placeholderName;
@@ -450,34 +581,25 @@
             const name = document.getElementById('position-name').value.trim();
             const errorDiv = document.getElementById('position-error');
 
-            // Validate country code
             if (!countryCode || !countryCodeLocations[countryCode]) {
                 errorDiv.textContent = t.invalidCountryCode;
                 return;
             }
 
-            // Get the maximum length for the selected country code
             const maxLength = countryCodeMaxLengths[countryCode] || 10;
-
-            // Validate phone number length and format
             if (!phoneNumber || !/^\d+$/.test(phoneNumber) || phoneNumber.length > maxLength) {
                 errorDiv.textContent = t.invalidPhone(maxLength);
                 return;
             }
 
-            // Combine country code and phone number
             const phone = `${countryCode}${phoneNumber}`;
-
             const locationData = countryCodeLocations[countryCode];
             if (!locationData) {
                 errorDiv.textContent = t.locationNotAvailable;
                 return;
             }
 
-            // Clear error message
             errorDiv.textContent = '';
-
-            // Add marker at the simulated location
             const customName = name ? name : null;
             const newMarker = L.marker([locationData.lat, locationData.lng]).addTo(map);
             newMarker.phone = phone;
@@ -487,7 +609,6 @@
             customMarkers.push(newMarker);
             saveCustomLocations();
 
-            // Close the form and popup menu
             toggleAddPositionForm();
             togglePopupMenu();
         }
@@ -497,36 +618,29 @@
             const markerIndex = customMarkers.findIndex(m => m.phone === phone);
             if (markerIndex !== -1) {
                 const marker = customMarkers[markerIndex];
-                marker.remove(); // Remove from map
-                customMarkers.splice(markerIndex, 1); // Remove from array
-                saveCustomLocations(); // Update localStorage
+                marker.remove();
+                customMarkers.splice(markerIndex, 1);
+                saveCustomLocations();
             }
         };
 
-        // Function to remove all positions (except current user location)
+        // Function to remove all positions
         function removeAllPositions() {
             if (!isAppRunning) return;
 
             customMarkers.forEach(marker => marker.remove());
             customMarkers = [];
             localStorage.removeItem('customLocations');
-            togglePopupMenu(); // Close the popup menu
+            togglePopupMenu();
         }
 
         // Function to toggle the popup menu
         function togglePopupMenu() {
             const popupMenu = document.getElementById('popup-menu');
             const isOpen = popupMenu.classList.toggle('open');
-            // Close map mode options and add position form if popup is closed
             if (!isOpen) {
-                document.getElementById('map-mode-options').classList.remove('open');
                 document.getElementById('add-position-form').classList.remove('open');
             }
-        }
-
-        // Function to toggle map mode options
-        function toggleMapModeOptions() {
-            document.getElementById('map-mode-options').classList.toggle('open');
         }
 
         // Function to change map mode
@@ -535,7 +649,6 @@
 
             currentMapMode = mode;
             updateMapLanguage();
-            togglePopupMenu(); // Close the popup menu
         }
 
         // Function to shutdown the application
@@ -543,18 +656,13 @@
             if (!isAppRunning) return;
 
             isAppRunning = false;
-
-            // Remove map, marker, and custom markers
             if (marker) marker.remove();
             customMarkers.forEach(m => m.remove());
             map.remove();
             localStorage.removeItem('customLocations');
             customMarkers = [];
 
-            // Clear the entire page content
             document.body.innerHTML = '';
-
-            // Display thank you message
             const t = getCurrentTranslations();
             const messageDiv = document.createElement('div');
             messageDiv.className = 'thank-you-message';
@@ -565,11 +673,8 @@
         // Function to set the language and update UI
         function setLanguage(lang) {
             currentLanguage = lang;
-            // Update selected button styling
             document.getElementById('lang-en').classList.toggle('selected', lang === 'en');
             document.getElementById('lang-device').classList.toggle('selected', lang === 'device');
-
-            // Update all textual elements
             updateUIText();
             updateMapLanguage();
         }
@@ -578,16 +683,12 @@
         function updateUIText() {
             const t = getCurrentTranslations();
             const lang = currentLanguage === 'device' ? deviceLang : currentLanguage;
-
-            // Set RTL for the entire page
             const isRTL = ['ar', 'he', 'fa', 'ur'].includes(lang);
             document.body.setAttribute('dir', isRTL ? 'rtl' : 'ltr');
 
-            // Update page title and heading
             document.getElementById('page-title').textContent = t.pageTitle;
             document.getElementById('page-heading').textContent = t.pageTitle;
-
-            // Update popup menu items
+            document.getElementById('font-size').textContent = t.fontSize;
             document.getElementById('add-position').textContent = t.addPosition;
             document.getElementById('remove-all-positions').textContent = t.removeAllPositions;
             document.getElementById('map-mode').textContent = t.mapMode;
@@ -600,18 +701,14 @@
 
             const t = getCurrentTranslations();
             const lang = currentLanguage === 'device' ? deviceLang : currentLanguage;
-
-            // Set text direction for the map
             const isRTL = ['ar', 'he', 'fa', 'ur'].includes(lang);
             document.getElementById('map').setAttribute('dir', isRTL ? 'rtl' : 'ltr');
 
-            // Remove existing marker and tile layer
             if (marker) marker.remove();
             map.eachLayer(layer => {
                 if (layer instanceof L.TileLayer) map.removeLayer(layer);
             });
 
-            // Add tile layer based on map mode
             let tileLayer;
             if (currentMapMode === 'roadmap') {
                 tileLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
@@ -628,7 +725,6 @@
                     attribution: t.mapAttribution.hybrid,
                     maxZoom: 19,
                 });
-                // Add a secondary layer for labels (hybrid mode)
                 L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
                     attribution: '',
                     maxZoom: 19,
@@ -637,11 +733,8 @@
             }
             tileLayer.addTo(map);
 
-            // Customize popup based on language
             const hasLocation = window.currentLocation != null;
             const popupText = t.mainMarkerPopup(hasLocation);
-
-            // Update marker with current or default location
             const location = window.currentLocation || [51.505, -0.09];
             marker = L.marker(location).addTo(map)
                 .bindPopup(popupText)
@@ -651,8 +744,6 @@
         // Function to get current location
         function getCurrentLocation() {
             const t = getCurrentTranslations();
-
-            // Check for secure context (HTTPS)
             if (window.location.protocol !== 'https:') {
                 alert(t.httpsError);
                 window.currentLocation = null;
@@ -665,8 +756,8 @@
                     position => {
                         const { latitude, longitude } = position.coords;
                         window.currentLocation = [latitude, longitude];
-                        map.setView(window.currentLocation, 15); // Zoom level 15 (default + 2)
-                        updateMapLanguage(); // Update map with new location
+                        map.setView(window.currentLocation, 15);
+                        updateMapLanguage();
                     },
                     error => {
                         let errorMessage = t.locationErrorDefault;
@@ -709,8 +800,11 @@
         // Reset map mode to roadmap on initial load
         currentMapMode = 'roadmap';
 
+        // Load font size preference
+        loadFontSize();
+
         // Set default to device language and initialize UI
-        setLanguage('device'); // Default to device language
+        setLanguage('device');
 
         // Load custom locations
         loadCustomLocations();
