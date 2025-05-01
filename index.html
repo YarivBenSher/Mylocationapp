@@ -47,6 +47,8 @@
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <!-- Leaflet JavaScript -->
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <!-- Haversine formula for distance calculation -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/geolib/3.3.4/geolib.min.js"></script>
     <style>
         :root {
             --font-scale: 1; /* Default font size multiplier */
@@ -267,6 +269,40 @@
             font-size: calc(12px * var(--font-scale));
             opacity: 1;
         }
+        /* Share location form styling */
+        .share-location-form {
+            display: none;
+            padding: 8px;
+            background-color: #444;
+            border-radius: 5px;
+        }
+        .share-location-form.open {
+            display: block;
+        }
+        .share-location-form input {
+            width: 100%;
+            padding: 6px;
+            margin-bottom: 6px;
+            border: none;
+            border-radius: 3px;
+            background-color: #666;
+            color: white;
+            font-size: calc(14px * var(--font-scale));
+        }
+        .share-location-form button {
+            width: 100%;
+            padding: 6px;
+            background-color: #555;
+            color: white;
+            border: none;
+            border-radius: 3px;
+            cursor: pointer;
+            transition: background-color 0.3s;
+            font-size: calc(14px * var(--font-scale));
+        }
+        .share-location-form button:hover {
+            background-color: #666;
+        }
         /* Custom marker popup styling */
         .custom-marker-popup {
             text-align: center;
@@ -298,6 +334,23 @@
             color: #333;
             text-align: center;
             padding: 20px;
+        }
+        /* Nearby users notification */
+        .nearby-notification {
+            position: absolute;
+            top: 70px;
+            left: 50%;
+            transform: translateX(-50%);
+            background-color: #333;
+            color: white;
+            padding: 8px;
+            border-radius: 5px;
+            font-size: calc(14px * var(--font-scale));
+            z-index: 1002;
+            display: none;
+        }
+        .nearby-notification.open {
+            display: block;
         }
     </style>
 </head>
@@ -341,8 +394,15 @@
                     <button onclick="changeMapMode('satellite')">🛰️</button>
                     <button onclick="changeMapMode('hybrid')">🗺️</button>
                 </div>
+                <div id="share-location" onclick="toggleShareLocationForm()">Share Location</div>
+                <div class="share-location-form" id="share-location-form">
+                    <input type="text" id="share-id" placeholder="Enter ID or Phone">
+                    <button onclick="submitShareLocation()">Share</button>
+                </div>
                 <div id="shutdown" onclick="shutdown()">Shutdown</div>
             </div>
+            <!-- Nearby users notification -->
+            <div class="nearby-notification" id="nearby-notification"></div>
         </div>
     </div>
 
@@ -356,6 +416,7 @@
         let deviceLang = navigator.language || navigator.userLanguage || 'en';
         deviceLang = deviceLang.split('-')[0];
         let currentMapMode = 'roadmap';
+        let currentLocation = null;
 
         // Font size levels
         const fontSizeLevels = {
@@ -412,6 +473,9 @@
                 addPositionSubmit: "Set on Map",
                 removeAllPositions: "Remove All Positions",
                 mapMode: "Map Mode",
+                shareLocation: "Share Location",
+                placeholderShareId: "Enter ID or Phone",
+                shareLocationSubmit: "Share",
                 shutdown: "Shutdown",
                 invalidPhone: (maxLength) => `Invalid phone number. Must be up to ${maxLength} digits.`,
                 invalidCountryCode: "Please select a valid country code.",
@@ -425,6 +489,7 @@
                     hybrid: '© Esri, Maxar, Earthstar Geographics, and the GIS User Community'
                 },
                 thankYouMessage: "Thank you for using Live-Runners Map",
+                nearbyUsers: (count) => `${count} user(s) nearby!`,
                 locationErrorDefault: "Unable to retrieve location. Using default location (London).",
                 locationErrorPermission: "Location permission denied. Please allow location access in your browser settings and refresh the page.",
                 locationErrorUnavailable: "Location information is unavailable. Please ensure location services are enabled on your device.",
@@ -442,6 +507,9 @@
                 addPositionSubmit: "קבע על המפה",
                 removeAllPositions: "הסר את כל המיקומים",
                 mapMode: "מצב מפה",
+                shareLocation: "שיתוף מיקום",
+                placeholderShareId: "הזן מזהה או טלפון",
+                shareLocationSubmit: "שיתוף",
                 shutdown: "כיבוי",
                 invalidPhone: (maxLength) => `מספר טלפון לא תקין. חייב להכיל עד ${maxLength} ספרות.`,
                 invalidCountryCode: "אנא בחר קוד מדינה תקין.",
@@ -455,6 +523,7 @@
                     hybrid: '© Esri, Maxar, Earthstar Geographics, וקהילת משתמשי GIS'
                 },
                 thankYouMessage: "תודה שהשתמשת במפת רצים חיה",
+                nearbyUsers: (count) => `${count} משתמשים קרובים!`,
                 locationErrorDefault: "לא ניתן לאחזר את המיקום. משתמש במיקום ברירת מחדל (לונדון).",
                 locationErrorPermission: "הרשאת המיקום נדחתה. אנא אפשר גישה למיקום בהגדרות הדפדפן ורענן את הדף.",
                 locationErrorUnavailable: "מידע המיקום אינו זמין. אנא ודא ששירותי המיקום מופעלים במכשיר שלך.",
@@ -513,6 +582,7 @@
                     return marker;
                 });
             }
+            loadSharedLocations();
         }
 
         // Save custom locations to localStorage
@@ -525,6 +595,32 @@
                 customName: marker.customName
             }));
             localStorage.setItem('customLocations', JSON.stringify(locations));
+        }
+
+        // Load shared locations from localStorage
+        function loadSharedLocations() {
+            const sharedLocations = JSON.parse(localStorage.getItem('sharedLocations') || '[]');
+            sharedLocations.forEach(loc => {
+                if (!customMarkers.some(m => m.phone === loc.phone)) {
+                    const marker = L.marker([loc.lat, loc.lng]).addTo(map);
+                    marker.phone = loc.phone;
+                    marker.country = loc.country || 'Unknown';
+                    marker.customName = loc.customName || loc.phone;
+                    updateMarkerPopup(marker);
+                    customMarkers.push(marker);
+                }
+            });
+            checkNearbyUsers();
+        }
+
+        // Save shared location
+        function saveSharedLocation(phone, lat, lng, country, customName) {
+            let sharedLocations = JSON.parse(localStorage.getItem('sharedLocations') || '[]');
+            if (!sharedLocations.some(loc => loc.phone === phone)) {
+                sharedLocations.push({ phone, lat, lng, country, customName });
+                localStorage.setItem('sharedLocations', JSON.stringify(sharedLocations));
+                loadSharedLocations();
+            }
         }
 
         // Function to update a marker's popup
@@ -571,6 +667,18 @@
             }
         }
 
+        // Function to toggle the share location form
+        function toggleShareLocationForm() {
+            const form = document.getElementById('share-location-form');
+            const isOpen = form.classList.toggle('open');
+            if (isOpen) {
+                document.getElementById('share-id').value = '';
+                const t = getCurrentTranslations();
+                document.getElementById('share-id').placeholder = t.placeholderShareId;
+                document.querySelector('#share-location-form button').textContent = t.shareLocationSubmit;
+            }
+        }
+
         // Function to submit the position from the form
         function submitPosition() {
             if (!isAppRunning) return;
@@ -613,6 +721,23 @@
             togglePopupMenu();
         }
 
+        // Function to submit the shared location
+        function submitShareLocation() {
+            if (!isAppRunning || !currentLocation) return;
+
+            const t = getCurrentTranslations();
+            const shareId = document.getElementById('share-id').value.trim();
+            if (!shareId) {
+                alert('Please enter an ID or phone number.');
+                return;
+            }
+
+            const [lat, lng] = currentLocation;
+            saveSharedLocation(shareId, lat, lng, 'Shared Location', shareId);
+            toggleShareLocationForm();
+            togglePopupMenu();
+        }
+
         // Function to remove a specific position
         window.removePosition = function(phone) {
             const markerIndex = customMarkers.findIndex(m => m.phone === phone);
@@ -621,6 +746,9 @@
                 marker.remove();
                 customMarkers.splice(markerIndex, 1);
                 saveCustomLocations();
+                let sharedLocations = JSON.parse(localStorage.getItem('sharedLocations') || '[]');
+                sharedLocations = sharedLocations.filter(loc => loc.phone !== phone);
+                localStorage.setItem('sharedLocations', JSON.stringify(sharedLocations));
             }
         };
 
@@ -631,6 +759,7 @@
             customMarkers.forEach(marker => marker.remove());
             customMarkers = [];
             localStorage.removeItem('customLocations');
+            localStorage.removeItem('sharedLocations');
             togglePopupMenu();
         }
 
@@ -640,6 +769,7 @@
             const isOpen = popupMenu.classList.toggle('open');
             if (!isOpen) {
                 document.getElementById('add-position-form').classList.remove('open');
+                document.getElementById('share-location-form').classList.remove('open');
             }
         }
 
@@ -660,6 +790,7 @@
             customMarkers.forEach(m => m.remove());
             map.remove();
             localStorage.removeItem('customLocations');
+            localStorage.removeItem('sharedLocations');
             customMarkers = [];
 
             document.body.innerHTML = '';
@@ -692,6 +823,7 @@
             document.getElementById('add-position').textContent = t.addPosition;
             document.getElementById('remove-all-positions').textContent = t.removeAllPositions;
             document.getElementById('map-mode').textContent = t.mapMode;
+            document.getElementById('share-location').textContent = t.shareLocation;
             document.getElementById('shutdown').textContent = t.shutdown;
         }
 
@@ -733,9 +865,9 @@
             }
             tileLayer.addTo(map);
 
-            const hasLocation = window.currentLocation != null;
+            const hasLocation = currentLocation != null;
             const popupText = t.mainMarkerPopup(hasLocation);
-            const location = window.currentLocation || [51.505, -0.09];
+            const location = currentLocation || [51.505, -0.09];
             marker = L.marker(location).addTo(map)
                 .bindPopup(popupText)
                 .openPopup();
@@ -746,7 +878,7 @@
             const t = getCurrentTranslations();
             if (window.location.protocol !== 'https:') {
                 alert(t.httpsError);
-                window.currentLocation = null;
+                currentLocation = null;
                 updateMapLanguage();
                 return;
             }
@@ -755,9 +887,10 @@
                 navigator.geolocation.getCurrentPosition(
                     position => {
                         const { latitude, longitude } = position.coords;
-                        window.currentLocation = [latitude, longitude];
-                        map.setView(window.currentLocation, 15);
+                        currentLocation = [latitude, longitude];
+                        map.setView(currentLocation, 15);
                         updateMapLanguage();
+                        checkNearbyUsers();
                     },
                     error => {
                         let errorMessage = t.locationErrorDefault;
@@ -777,7 +910,7 @@
                         }
                         console.error('Geolocation error:', error);
                         alert(errorMessage);
-                        window.currentLocation = null;
+                        currentLocation = null;
                         updateMapLanguage();
                     },
                     {
@@ -789,8 +922,31 @@
             } else {
                 console.error('Geolocation not supported');
                 alert(t.locationErrorNotSupported);
-                window.currentLocation = null;
+                currentLocation = null;
                 updateMapLanguage();
+            }
+        }
+
+        // Function to check nearby users
+        function checkNearbyUsers() {
+            if (!currentLocation) return;
+
+            const t = getCurrentTranslations();
+            const sharedLocations = JSON.parse(localStorage.getItem('sharedLocations') || '[]');
+            const nearbyCount = sharedLocations.filter(loc => {
+                const distance = geolib.getDistance(
+                    { latitude: currentLocation[0], longitude: currentLocation[1] },
+                    { latitude: loc.lat, longitude: loc.lng }
+                );
+                return distance <= 1000; // 1 km radius
+            }).length;
+
+            const notification = document.getElementById('nearby-notification');
+            if (nearbyCount > 0) {
+                notification.textContent = t.nearbyUsers(nearbyCount);
+                notification.classList.add('open');
+            } else {
+                notification.classList.remove('open');
             }
         }
 
@@ -811,6 +967,9 @@
 
         // Fetch location on every load
         getCurrentLocation();
+
+        // Periodically check for nearby users
+        setInterval(checkNearbyUsers, 5000);
     </script>
 </body>
 </html>
