@@ -49,7 +49,7 @@
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <style>
         :root {
-            --font-scale: 1; /* Default font size multiplier */
+            --font-scale: 1; /* Revert to original size for the entire page */
         }
         body {
             margin: 0;
@@ -138,7 +138,6 @@
             box-shadow: 0 2px 5px rgba(0, 0, 0, 0.5);
             z-index: 1001;
             min-width: 180px;
-            cursor: move; /* Indicate the menu is draggable */
         }
         .popup-menu.open {
             display: block;
@@ -148,21 +147,10 @@
             cursor: pointer;
             border-radius: 3px;
             transition: background-color 0.3s;
-            font-size: calc(16px * var(--font-scale));
+            font-size: calc(16px * var(--font-scale) * 2); /* 2x size for menu items */
         }
         .popup-menu div:hover {
             background-color: #555;
-        }
-        /* Font size container */
-        .font-size {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            padding: 8px;
-            border-radius: 3px;
-        }
-        .font-size span {
-            flex: 1;
         }
         /* Map mode container */
         .map-mode {
@@ -174,8 +162,9 @@
         }
         .map-mode span {
             flex: 1;
+            font-size: calc(16px * var(--font-scale) * 2); /* 2x size */
         }
-        /* Map refresh container (now labeled as Refreshing) */
+        /* Map refresh container (labeled as Refreshing) */
         .map-refresh {
             display: flex;
             justify-content: space-between;
@@ -185,13 +174,14 @@
         }
         .map-refresh span {
             flex: 1;
+            font-size: calc(16px * var(--font-scale) * 2); /* 2x size */
         }
         .map-mode button, .map-refresh button {
             width: 24px;
             height: 24px;
             border: none;
             border-radius: 50%;
-            font-size: calc(14px * var(--font-scale));
+            font-size: calc(14px * var(--font-scale) * 2); /* 2x size */
             display: flex;
             align-items: center;
             justify-content: center;
@@ -201,23 +191,6 @@
             margin-left: 5px;
         }
         .map-mode button:hover, .map-refresh button:hover {
-            background-color: #555;
-        }
-        .font-size button {
-            width: 24px;
-            height: 24px;
-            border: none;
-            border-radius: 50%;
-            font-size: calc(14px * var(--font-scale));
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            cursor: pointer;
-            background-color: #666;
-            color: white;
-            margin-left: 5px;
-        }
-        .font-size button:hover {
             background-color: #555;
         }
         /* Add position form styling */
@@ -243,7 +216,7 @@
             border-radius: 3px;
             background-color: #666;
             color: white;
-            font-size: calc(14px * var(--font-scale));
+            font-size: calc(14px * var(--font-scale) * 2); /* 2x size */
         }
         .add-position-form select {
             flex: 1;
@@ -263,21 +236,27 @@
             border-radius: 3px;
             cursor: pointer;
             transition: background-color 0.3s;
-            font-size: calc(14px * var(--font-scale));
+            font-size: calc(14px * var(--font-scale) * 2); /* 2x size */
         }
         .add-position-form button:hover {
             background-color: #666;
         }
         .add-position-form .error-message {
             color: #ff5555;
-            font-size: calc(12px * var(--font-scale));
+            font-size: calc(12px * var(--font-scale) * 2); /* 2x size */
             margin-top: 5px;
+            text-align: center;
+        }
+        .add-position-form .full-phone {
+            color: #ccc;
+            font-size: calc(12px * var(--font-scale) * 2); /* 2x size */
+            margin-bottom: 6px;
             text-align: center;
         }
         /* Make placeholders more visible */
         .add-position-form input::placeholder {
             color: #ccc;
-            font-size: calc(12px * var(--font-scale));
+            font-size: calc(12px * var(--font-scale) * 2); /* 2x size */
             opacity: 1;
         }
         /* Custom marker popup styling */
@@ -326,39 +305,35 @@
             <div id="map"></div>
             <!-- Popup menu -->
             <div class="popup-menu" id="popup-menu">
-                <div class="font-size">
-                    <span id="font-size">Font Size</span>
-                    <button onclick="increaseFontSize()">+</button>
-                    <button onclick="decreaseFontSize()">−</button>
+                <div class="map-refresh">
+                    <span id="map-refresh">Refreshing: 30 sec</span>
+                    <button onclick="increaseRefreshInterval()">+</button>
+                    <button onclick="decreaseRefreshInterval()">−</button>
+                </div>
+                <div class="map-mode">
+                    <span id="map-mode">Map Mode</span>
+                    <button onclick="changeMapMode('roadmap')">🛤️</button>
+                    <button onclick="changeMapMode('satellite')">🛰️</button>
+                    <button onclick="changeMapMode('hybrid')">🗺️</button>
                 </div>
                 <div id="add-position" onclick="toggleAddPositionForm()">Add Position</div>
                 <div class="add-position-form" id="add-position-form">
                     <div class="phone-inputs">
-                        <select id="position-country-code" onchange="updatePhoneNumberLength()">
+                        <select id="position-country-code" onchange="updatePhoneNumberLength(); updateFullPhone()">
                             <option value="+972">+972 (Israel)</option>
                             <option value="+1">+1 (USA)</option>
                             <option value="+44">+44 (UK)</option>
                             <option value="+33">+33 (France)</option>
                             <option value="+81">+81 (Japan)</option>
                         </select>
-                        <input type="tel" id="position-phone" pattern="[0-9]*" maxlength="9">
+                        <input type="tel" id="position-phone" pattern="[0-9]*" maxlength="9" oninput="updateFullPhone()">
                     </div>
+                    <div class="full-phone" id="full-phone"></div>
                     <input type="text" id="position-name">
                     <button onclick="submitPosition()">Set on Map</button>
                     <div class="error-message" id="position-error"></div>
                 </div>
                 <div id="remove-all-positions" onclick="removeAllPositions()">Remove All Positions</div>
-                <div class="map-mode">
-                    <span id="map-mode">Map Mode</span>
-                    <button onclick="changeMapMode('roadmap')">🛤️</button>
-                    <button onclick="changeMapMode('satellite')">�卫星️</button>
-                    <button onclick="changeMapMode('hybrid')">🗺️</button>
-                </div>
-                <div class="map-refresh">
-                    <span id="map-refresh">Refreshing: 30 sec</span>
-                    <button onclick="increaseRefreshInterval()">+</button>
-                    <button onclick="decreaseRefreshInterval()">−</button>
-                </div>
                 <div id="shutdown" onclick="shutdown()">Shutdown</div>
             </div>
         </div>
@@ -375,53 +350,9 @@
         deviceLang = deviceLang.split('-')[0];
         let currentMapMode = 'roadmap';
 
-        // Font size levels
-        const fontSizeLevels = {
-            small: 0.8,
-            medium: 1.0,
-            large: 1.2
-        };
-        let currentFontSizeLevel = 'medium'; // Default
-
         // Map refresh interval (in seconds)
         let refreshIntervalSeconds = 30; // Default: 30 seconds
         let refreshIntervalId = null;
-
-        // Load font size from localStorage
-        function loadFontSize() {
-            const savedLevel = localStorage.getItem('fontSizeLevel');
-            if (savedLevel && fontSizeLevels[savedLevel]) {
-                currentFontSizeLevel = savedLevel;
-                applyFontSize();
-            }
-        }
-
-        // Apply font size multiplier
-        function applyFontSize() {
-            const multiplier = fontSizeLevels[currentFontSizeLevel];
-            document.documentElement.style.setProperty('--font-scale', multiplier);
-            localStorage.setItem('fontSizeLevel', currentFontSizeLevel);
-        }
-
-        // Increase font size
-        function increaseFontSize() {
-            if (currentFontSizeLevel === 'small') {
-                currentFontSizeLevel = 'medium';
-            } else if (currentFontSizeLevel === 'medium') {
-                currentFontSizeLevel = 'large';
-            }
-            applyFontSize();
-        }
-
-        // Decrease font size
-        function decreaseFontSize() {
-            if (currentFontSizeLevel === 'large') {
-                currentFontSizeLevel = 'medium';
-            } else if (currentFontSizeLevel === 'medium') {
-                currentFontSizeLevel = 'small';
-            }
-            applyFontSize();
-        }
 
         // Increase refresh interval
         function increaseRefreshInterval() {
@@ -477,18 +408,17 @@
             en: {
                 pageTitle: "Live-Runners Map",
                 addPosition: "Add Position",
-                fontSize: "Font Size",
-                placeholderPhoneNumber: "Phone Number",
-                placeholderName: "Optional Name",
-                addPositionSubmit: "Set on Map",
-                removeAllPositions: "Remove All Positions",
                 mapMode: "Map Mode",
                 mapRefresh: "Refreshing",
                 shutdown: "Shutdown",
+                removeAllPositions: "Remove All Positions",
+                placeholderPhoneNumber: "Phone Number",
+                placeholderName: "Optional Name",
+                addPositionSubmit: "Set on Map",
                 invalidPhone: (maxLength) => `Invalid phone number. Must be up to ${maxLength} digits.`,
                 invalidCountryCode: "Please select a valid country code.",
                 locationNotAvailable: "Location not available for this country code.",
-                markerPopupTitle: (name, phone) => name || phone,
+                markerPopupTitle: (name, phone) => name ? `${name} (${phone})` : phone,
                 removePosition: "Remove Position",
                 mainMarkerPopup: (hasLocation) => hasLocation ? "Your current location!<br> You can zoom and pan the map." : "Default location (London)<br> You can zoom and pan the map.",
                 mapAttribution: {
@@ -508,18 +438,17 @@
             he: {
                 pageTitle: "מפת רצים חיה",
                 addPosition: "הוסף מיקום",
-                fontSize: "גודל גופן",
-                placeholderPhoneNumber: "מספר טלפון",
-                placeholderName: "שם אופציונלי",
-                addPositionSubmit: "קבע על המפה",
-                removeAllPositions: "הסר את כל המיקומים",
                 mapMode: "מצב מפה",
                 mapRefresh: "מרענן",
                 shutdown: "כיבוי",
+                removeAllPositions: "הסר את כל המיקומים",
+                placeholderPhoneNumber: "מספר טלפון",
+                placeholderName: "שם אופציונלי",
+                addPositionSubmit: "קבע על המפה",
                 invalidPhone: (maxLength) => `מספר טלפון לא תקין. חייב להכיל עד ${maxLength} ספרות.`,
                 invalidCountryCode: "אנא בחר קוד מדינה תקין.",
                 locationNotAvailable: "המיקום אינו זמין עבור קוד מדינה זה.",
-                markerPopupTitle: (name, phone) => name || phone,
+                markerPopupTitle: (name, phone) => name ? `${name} (${phone})` : phone,
                 removePosition: "הסר מיקום",
                 mainMarkerPopup: (hasLocation) => hasLocation ? "המיקום הנוכחי שלך!<br> ניתן להתקרב ולהזיז את המפה." : "מיקום ברירת מחדל (לונדון)<br> ניתן להתקרב ולהזיז את המפה.",
                 mapAttribution: {
@@ -628,6 +557,18 @@
             document.getElementById('position-phone').setAttribute('maxlength', maxLength);
         }
 
+        // Function to update the display of the full phone number
+        function updateFullPhone() {
+            const countryCode = document.getElementById('position-country-code').value;
+            const phoneNumber = document.getElementById('position-phone').value.trim();
+            const fullPhoneDiv = document.getElementById('full-phone');
+            if (phoneNumber) {
+                fullPhoneDiv.textContent = `Full Number: ${countryCode}${phoneNumber}`;
+            } else {
+                fullPhoneDiv.textContent = '';
+            }
+        }
+
         // Function to toggle the add position form
         function toggleAddPositionForm() {
             const form = document.getElementById('add-position-form');
@@ -636,6 +577,7 @@
                 document.getElementById('position-phone').value = '';
                 document.getElementById('position-name').value = '';
                 document.getElementById('position-error').textContent = '';
+                document.getElementById('full-phone').textContent = '';
                 setDefaultCountryCode();
                 const t = getCurrentTranslations();
                 document.getElementById('position-phone').placeholder = t.placeholderPhoneNumber;
@@ -713,11 +655,6 @@
             const isOpen = popupMenu.classList.toggle('open');
             if (!isOpen) {
                 document.getElementById('add-position-form').classList.remove('open');
-            } else {
-                // Reset position when opening to ensure it's visible
-                popupMenu.style.left = '50%';
-                popupMenu.style.top = '60px';
-                popupMenu.style.transform = 'translateX(-50%)';
             }
         }
 
@@ -772,7 +709,6 @@
 
             document.getElementById('page-title').textContent = t.pageTitle;
             document.getElementById('page-heading').textContent = t.pageTitle;
-            document.getElementById('font-size').textContent = t.fontSize;
             document.getElementById('add-position').textContent = t.addPosition;
             document.getElementById('remove-all-positions').textContent = t.removeAllPositions;
             document.getElementById('map-mode').textContent = t.mapMode;
@@ -879,83 +815,11 @@
             }
         }
 
-        // Make the popup menu draggable
-        const popupMenu = document.getElementById('popup-menu');
-        let isDragging = false;
-        let currentX;
-        let currentY;
-        let initialX;
-        let initialY;
-
-        popupMenu.addEventListener('mousedown', startDragging);
-        popupMenu.addEventListener('mousemove', drag);
-        popupMenu.addEventListener('mouseup', stopDragging);
-        popupMenu.addEventListener('mouseleave', stopDragging);
-
-        // For touch support (mobile devices)
-        popupMenu.addEventListener('touchstart', startDragging);
-        popupMenu.addEventListener('touchmove', drag);
-        popupMenu.addEventListener('touchend', stopDragging);
-
-        function startDragging(e) {
-            // Prevent dragging if interacting with menu items
-            if (e.target.tagName === 'BUTTON' || e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT') {
-                return;
-            }
-
-            isDragging = true;
-            popupMenu.style.transform = 'none'; // Remove transform to use absolute positioning
-
-            if (e.type === 'touchstart') {
-                initialX = e.touches[0].clientX - currentX;
-                initialY = e.touches[0].clientY - currentY;
-            } else {
-                initialX = e.clientX - currentX;
-                initialY = e.clientY - currentY;
-            }
-        }
-
-        function drag(e) {
-            if (isDragging) {
-                e.preventDefault();
-
-                let clientX, clientY;
-                if (e.type === 'touchmove') {
-                    clientX = e.touches[0].clientX;
-                    clientY = e.touches[0].clientY;
-                } else {
-                    clientX = e.clientX;
-                    clientY = e.clientY;
-                }
-
-                currentX = clientX - initialX;
-                currentY = clientY - initialY;
-
-                // Boundary checks to keep the menu within the viewport
-                const menuRect = popupMenu.getBoundingClientRect();
-                const maxX = window.innerWidth - menuRect.width;
-                const maxY = window.innerHeight - menuRect.height;
-
-                currentX = Math.max(0, Math.min(currentX, maxX));
-                currentY = Math.max(0, Math.min(currentY, maxY));
-
-                popupMenu.style.left = currentX + 'px';
-                popupMenu.style.top = currentY + 'px';
-            }
-        }
-
-        function stopDragging() {
-            isDragging = false;
-        }
-
         // Add event listener for the menu button
         document.getElementById('menu-btn').addEventListener('click', togglePopupMenu);
 
         // Reset map mode to roadmap on initial load
         currentMapMode = 'roadmap';
-
-        // Load font size preference
-        loadFontSize();
 
         // Set default to device language and initialize UI
         setLanguage('device');
