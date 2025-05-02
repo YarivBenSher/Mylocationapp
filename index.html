@@ -351,7 +351,7 @@
                 <div class="map-mode">
                     <span id="map-mode">Map Mode</span>
                     <button onclick="changeMapMode('roadmap')">🛤️</button>
-                    <button onclick="changeMapMode('satellite')">🛰️</button>
+                    <button onclick="changeMapMode('satellite')">�卫星️</button>
                     <button onclick="changeMapMode('hybrid')">🗺️</button>
                 </div>
                 <div class="map-refresh">
@@ -453,16 +453,22 @@
             }
         }
 
-        // Function to refresh the map (reload custom locations and update map)
+        // Function to refresh the map and update pinned locations
         function refreshMap() {
             if (!isAppRunning) return;
 
-            // Reload custom locations
-            customMarkers.forEach(marker => marker.remove());
-            customMarkers = [];
-            loadCustomLocations();
+            // Update the positions of existing custom markers
+            customMarkers.forEach(marker => {
+                const countryCode = marker.phone.substring(0, marker.phone.length - 9); // Extract country code from phone
+                const locationData = countryCodeLocations[countryCode];
+                if (locationData) {
+                    marker.setLatLng([locationData.lat, locationData.lng]);
+                    marker.country = locationData.name;
+                    updateMarkerPopup(marker);
+                }
+            });
 
-            // Update the map
+            // Update the map layers and main marker
             updateMapLanguage();
         }
 
