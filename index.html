@@ -49,7 +49,7 @@
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <style>
         :root {
-            --font-scale: 1; /* Revert to original size for the entire page */
+            --font-scale: 1; /* Original size for the entire page */
         }
         body {
             margin: 0;
@@ -137,7 +137,7 @@
             border-radius: 5px;
             box-shadow: 0 2px 5px rgba(0, 0, 0, 0.5);
             z-index: 1001;
-            min-width: 180px;
+            min-width: 300px; /* Increased to fit menu items on one line */
         }
         .popup-menu.open {
             display: block;
@@ -148,6 +148,7 @@
             border-radius: 3px;
             transition: background-color 0.3s;
             font-size: calc(16px * var(--font-scale) * 2); /* 2x size for menu items */
+            white-space: nowrap; /* Prevent text wrapping */
         }
         .popup-menu div:hover {
             background-color: #555;
@@ -163,6 +164,7 @@
         .map-mode span {
             flex: 1;
             font-size: calc(16px * var(--font-scale) * 2); /* 2x size */
+            white-space: nowrap; /* Prevent text wrapping */
         }
         /* Map refresh container (labeled as Refreshing) */
         .map-refresh {
@@ -175,6 +177,7 @@
         .map-refresh span {
             flex: 1;
             font-size: calc(16px * var(--font-scale) * 2); /* 2x size */
+            white-space: nowrap; /* Prevent text wrapping */
         }
         .map-mode button, .map-refresh button {
             width: 24px;
@@ -217,6 +220,7 @@
             background-color: #666;
             color: white;
             font-size: calc(14px * var(--font-scale) * 2); /* 2x size */
+            box-sizing: border-box; /* Ensure padding doesn't cause overflow */
         }
         .add-position-form select {
             flex: 1;
@@ -246,12 +250,14 @@
             font-size: calc(12px * var(--font-scale) * 2); /* 2x size */
             margin-top: 5px;
             text-align: center;
+            white-space: nowrap; /* Prevent wrapping */
         }
         .add-position-form .full-phone {
             color: #ccc;
             font-size: calc(12px * var(--font-scale) * 2); /* 2x size */
             margin-bottom: 6px;
             text-align: center;
+            white-space: nowrap; /* Prevent wrapping */
         }
         /* Make placeholders more visible */
         .add-position-form input::placeholder {
@@ -290,6 +296,22 @@
             color: #333;
             text-align: center;
             padding: 20px;
+        }
+        /* Mobile adjustments */
+        @media (max-width: 400px) {
+            .popup-menu {
+                min-width: 90%; /* Fit within viewport width */
+                left: 5%; /* Adjust position to fit within viewport */
+                transform: none; /* Remove centering transform */
+            }
+            .add-position-form .phone-inputs {
+                flex-direction: column; /* Stack inputs vertically on mobile */
+            }
+            .add-position-form select,
+            .add-position-form input[type="tel"] {
+                flex: none; /* Remove flex grow */
+                width: 100%; /* Full width on mobile */
+            }
         }
     </style>
 </head>
