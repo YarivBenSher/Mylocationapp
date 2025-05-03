@@ -211,7 +211,6 @@
             gap: 8px;
             margin-bottom: 6px;
         }
-        .add-position-form select,
         .add-position-form input {
             width: 100%;
             padding: 6px;
@@ -221,9 +220,6 @@
             color: white;
             font-size: calc(14px * var(--font-scale) * 2); /* 2x size */
             box-sizing: border-box; /* Ensure padding doesn't cause overflow */
-        }
-        .add-position-form select {
-            flex: 1;
         }
         .add-position-form input[type="tel"] {
             flex: 2;
@@ -249,13 +245,6 @@
             color: #ff5555;
             font-size: calc(12px * var(--font-scale) * 2); /* 2x size */
             margin-top: 5px;
-            text-align: center;
-            white-space: nowrap; /* Prevent wrapping */
-        }
-        .add-position-form .full-phone {
-            color: #ccc;
-            font-size: calc(12px * var(--font-scale) * 2); /* 2x size */
-            margin-bottom: 6px;
             text-align: center;
             white-space: nowrap; /* Prevent wrapping */
         }
@@ -307,7 +296,6 @@
             .add-position-form .phone-inputs {
                 flex-direction: column; /* Stack inputs vertically on mobile */
             }
-            .add-position-form select,
             .add-position-form input[type="tel"] {
                 flex: none; /* Remove flex grow */
                 width: 100%; /* Full width on mobile */
@@ -341,16 +329,8 @@
                 <div id="add-position" onclick="toggleAddPositionForm()">Add Position</div>
                 <div class="add-position-form" id="add-position-form">
                     <div class="phone-inputs">
-                        <select id="position-country-code" onchange="updatePhoneNumberLength(); updateFullPhone()">
-                            <option value="+972">+972 (Israel)</option>
-                            <option value="+1">+1 (USA)</option>
-                            <option value="+44">+44 (UK)</option>
-                            <option value="+33">+33 (France)</option>
-                            <option value="+81">+81 (Japan)</option>
-                        </select>
-                        <input type="tel" id="position-phone" pattern="[0-9]*" maxlength="9" oninput="updateFullPhone()">
+                        <input type="tel" id="position-phone" pattern="[0-9]{8}" maxlength="8">
                     </div>
-                    <div class="full-phone" id="full-phone"></div>
                     <input type="text" id="position-name">
                     <button onclick="submitPosition()">Set on Map</button>
                     <div class="error-message" id="position-error"></div>
@@ -434,10 +414,10 @@
                 mapRefresh: "Refreshing",
                 shutdown: "Shutdown",
                 removeAllPositions: "Remove All Positions",
-                placeholderPhoneNumber: "Phone Number",
+                placeholderPhoneNumber: "8-digit Phone",
                 placeholderName: "Optional Name",
                 addPositionSubmit: "Set on Map",
-                invalidPhone: (maxLength) => `Invalid phone number. Must be up to ${maxLength} digits.`,
+                invalidPhone: "Invalid phone number. Must be exactly 8 digits.",
                 invalidCountryCode: "Please select a valid country code.",
                 locationNotAvailable: "Location not available for this country code.",
                 markerPopupTitle: (name, phone) => name ? `${name} (${phone})` : phone,
@@ -464,10 +444,10 @@
                 mapRefresh: "מרענן",
                 shutdown: "כיבוי",
                 removeAllPositions: "הסר את כל המיקומים",
-                placeholderPhoneNumber: "מספר טלפון",
+                placeholderPhoneNumber: "מספר טלפון 8 ספרות",
                 placeholderName: "שם אופציונלי",
                 addPositionSubmit: "קבע על המפה",
-                invalidPhone: (maxLength) => `מספר טלפון לא תקין. חייב להכיל עד ${maxLength} ספרות.`,
+                invalidPhone: "מספר טלפון לא תקין. חייב להכיל בדיוק 8 ספרות.",
                 invalidCountryCode: "אנא בחר קוד מדינה תקין.",
                 locationNotAvailable: "המיקום אינו זמין עבור קוד מדינה זה.",
                 markerPopupTitle: (name, phone) => name ? `${name} (${phone})` : phone,
@@ -500,29 +480,6 @@
             '+33': { lat: 48.8566, lng: 2.3522, name: 'France (Paris)' },
             '+81': { lat: 35.6762, lng: 139.6503, name: 'Japan (Tokyo)' }
         };
-
-        // Mapping of country codes to maximum phone number lengths (excluding country code)
-        const countryCodeMaxLengths = {
-            '+972': 9,
-            '+1': 10,
-            '+44': 10,
-            '+33': 9,
-            '+81': 10
-        };
-
-        // Mapping of language codes to country codes for default selection
-        const languageToCountryCode = {
-            'he': '+972',
-            'en': '+1',
-            'fr': '+33',
-            'ja': '+81',
-        };
-
-        // Function to get the current language's translations
-        function getCurrentTranslations() {
-            const lang = currentLanguage === 'device' ? deviceLang : currentLanguage;
-            return translations[lang] || translations.en;
-        }
 
         // Load custom locations from localStorage
         function loadCustomLocations() {
@@ -564,33 +521,6 @@
             marker.bindPopup(popupContent);
         }
 
-        // Function to set the default country code based on user's language
-        function setDefaultCountryCode() {
-            const lang = currentLanguage === 'device' ? deviceLang : currentLanguage;
-            const defaultCountryCode = languageToCountryCode[lang] || '+1';
-            document.getElementById('position-country-code').value = defaultCountryCode;
-            updatePhoneNumberLength();
-        }
-
-        // Function to update the phone number input's maxlength based on selected country code
-        function updatePhoneNumberLength() {
-            const countryCode = document.getElementById('position-country-code').value;
-            const maxLength = countryCodeMaxLengths[countryCode] || 10;
-            document.getElementById('position-phone').setAttribute('maxlength', maxLength);
-        }
-
-        // Function to update the display of the full phone number
-        function updateFullPhone() {
-            const countryCode = document.getElementById('position-country-code').value;
-            const phoneNumber = document.getElementById('position-phone').value.trim();
-            const fullPhoneDiv = document.getElementById('full-phone');
-            if (phoneNumber) {
-                fullPhoneDiv.textContent = `Full Number: ${countryCode}${phoneNumber}`;
-            } else {
-                fullPhoneDiv.textContent = '';
-            }
-        }
-
         // Function to toggle the add position form
         function toggleAddPositionForm() {
             const form = document.getElementById('add-position-form');
@@ -599,8 +529,6 @@
                 document.getElementById('position-phone').value = '';
                 document.getElementById('position-name').value = '';
                 document.getElementById('position-error').textContent = '';
-                document.getElementById('full-phone').textContent = '';
-                setDefaultCountryCode();
                 const t = getCurrentTranslations();
                 document.getElementById('position-phone').placeholder = t.placeholderPhoneNumber;
                 document.getElementById('position-name').placeholder = t.placeholderName;
@@ -613,24 +541,19 @@
             if (!isAppRunning) return;
 
             const t = getCurrentTranslations();
-            const countryCode = document.getElementById('position-country-code').value;
             const phoneNumber = document.getElementById('position-phone').value.trim();
             const name = document.getElementById('position-name').value.trim();
             const errorDiv = document.getElementById('position-error');
 
-            if (!countryCode || !countryCodeLocations[countryCode]) {
-                errorDiv.textContent = t.invalidCountryCode;
+            if (!phoneNumber || !/^\d{8}$/.test(phoneNumber)) {
+                errorDiv.textContent = t.invalidPhone;
                 return;
             }
 
-            const maxLength = countryCodeMaxLengths[countryCode] || 10;
-            if (!phoneNumber || !/^\d+$/.test(phoneNumber) || phoneNumber.length > maxLength) {
-                errorDiv.textContent = t.invalidPhone(maxLength);
-                return;
-            }
-
-            const phone = `${countryCode}${phoneNumber}`;
-            const locationData = countryCodeLocations[countryCode];
+            // Trim the first digit (assuming it's 0) and concatenate with +972
+            const trimmedNumber = phoneNumber.substring(1); // Remove the first digit
+            const phone = `+972${trimmedNumber}`;
+            const locationData = countryCodeLocations['+972'];
             if (!locationData) {
                 errorDiv.textContent = t.locationNotAvailable;
                 return;
