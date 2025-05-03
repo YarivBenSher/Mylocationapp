@@ -207,8 +207,6 @@
             display: block;
         }
         .add-position-form .phone-inputs {
-            display: flex;
-            gap: 8px;
             margin-bottom: 6px;
         }
         .add-position-form input {
@@ -222,10 +220,10 @@
             box-sizing: border-box; /* Ensure padding doesn't cause overflow */
         }
         .add-position-form input[type="tel"] {
-            flex: 2;
+            margin-bottom: 6px; /* Space between phone and name inputs */
         }
         .add-position-form input[type="text"] {
-            margin-bottom: 6px;
+            margin-bottom: 6px; /* Space between name input and button */
         }
         .add-position-form button {
             width: 100%;
@@ -329,7 +327,7 @@
                 <div id="add-position" onclick="toggleAddPositionForm()">Add Position</div>
                 <div class="add-position-form" id="add-position-form">
                     <div class="phone-inputs">
-                        <input type="tel" id="position-phone" pattern="[0-9]{8}" maxlength="8">
+                        <input type="tel" id="position-phone" pattern="[0-9]{10}" maxlength="10">
                     </div>
                     <input type="text" id="position-name">
                     <button onclick="submitPosition()">Set on Map</button>
@@ -414,10 +412,10 @@
                 mapRefresh: "Refreshing",
                 shutdown: "Shutdown",
                 removeAllPositions: "Remove All Positions",
-                placeholderPhoneNumber: "8-digit Phone",
+                placeholderPhoneNumber: "10-digit Phone",
                 placeholderName: "Optional Name",
                 addPositionSubmit: "Set on Map",
-                invalidPhone: "Invalid phone number. Must be exactly 8 digits.",
+                invalidPhone: "Invalid phone number. Must be exactly 10 digits.",
                 invalidCountryCode: "Please select a valid country code.",
                 locationNotAvailable: "Location not available for this country code.",
                 markerPopupTitle: (name, phone) => name ? `${name} (${phone})` : phone,
@@ -444,10 +442,10 @@
                 mapRefresh: "מרענן",
                 shutdown: "כיבוי",
                 removeAllPositions: "הסר את כל המיקומים",
-                placeholderPhoneNumber: "מספר טלפון 8 ספרות",
+                placeholderPhoneNumber: "מספר טלפון 10 ספרות",
                 placeholderName: "שם אופציונלי",
                 addPositionSubmit: "קבע על המפה",
-                invalidPhone: "מספר טלפון לא תקין. חייב להכיל בדיוק 8 ספרות.",
+                invalidPhone: "מספר טלפון לא תקין. חייב להכיל בדיוק 10 ספרות.",
                 invalidCountryCode: "אנא בחר קוד מדינה תקין.",
                 locationNotAvailable: "המיקום אינו זמין עבור קוד מדינה זה.",
                 markerPopupTitle: (name, phone) => name ? `${name} (${phone})` : phone,
@@ -545,13 +543,13 @@
             const name = document.getElementById('position-name').value.trim();
             const errorDiv = document.getElementById('position-error');
 
-            if (!phoneNumber || !/^\d{8}$/.test(phoneNumber)) {
+            if (!phoneNumber || !/^\d{10}$/.test(phoneNumber)) {
                 errorDiv.textContent = t.invalidPhone;
                 return;
             }
 
             // Trim the first digit (assuming it's 0) and concatenate with +972
-            const trimmedNumber = phoneNumber.substring(1); // Remove the first digit
+            const trimmedNumber = phoneNumber.substring(1); // Remove the first digit, leaving 9 digits
             const phone = `+972${trimmedNumber}`;
             const locationData = countryCodeLocations['+972'];
             if (!locationData) {
